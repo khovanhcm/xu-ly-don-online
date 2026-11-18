@@ -151,7 +151,6 @@ details ul{margin:6px 0 0;padding-left:1.2em;display:flex;flex-direction:column;
         <button type="button" data-unit="don" aria-pressed="true">Đếm theo đơn</button>
         <button type="button" data-unit="dong" aria-pressed="false">Đếm theo dòng SP</button>
       </div>
-      <label class="chk"><input type="checkbox" id="chkHuy"> Tính cả đơn đã hủy</label>
       <label class="chk"><input type="checkbox" id="chkTra"> Tính phiếu trả hàng NCC</label>
     </div>
     <label class="btn primary upload" id="uploadBtn">Chọn file Excel<input type="file" id="fileIn" accept=".xlsx,.xls,.csv"></label>
@@ -257,7 +256,8 @@ details ul{margin:6px 0 0;padding-left:1.2em;display:flex;flex-direction:column;
     <summary>Cách tính số liệu</summary>
     <ul>
       <li>Đọc sheet "Chi tiết yêu cầu xuất": Mã đơn hàng, Siêu thị xuất, Thời gian hẹn giao, Hình thức giao hàng, Trạng thái xuất / giao hàng / hủy, Loại YCX, Mã và tên sản phẩm, Số lượng. Thông tin khách hàng không được đọc.</li>
-      <li>Mặc định đếm theo <b>đơn hàng</b> (mỗi mã đơn tính 1), bỏ đơn đã hủy và phiếu "Yêu cầu xuất trả hàng mua" (trả hàng nhà cung cấp). Bảng Pivot cũ đếm theo dòng sản phẩm và tính cả đơn hủy: bật "Đếm theo dòng SP" và hai ô tích để ra đúng số đó.</li>
+      <li>Trước khi chạy, trang bỏ hẳn các dòng có <b>"Đã hủy"</b> ở cột P (Trạng thái hủy) và <b>"Đã trả"</b> ở cột AS (Tình trạng nhập trả của sản phẩm đổi với sản phẩm chính). Số dòng đã bỏ hiện ở thẻ "Dòng đã loại khi nhập".</li>
+      <li>Mặc định đếm theo <b>đơn hàng</b> (mỗi mã đơn tính 1) và không tính phiếu "Yêu cầu xuất trả hàng mua" (trả hàng nhà cung cấp); bật "Đếm theo dòng SP" hoặc "Tính phiếu trả hàng NCC" khi cần.</li>
       <li><b>Cần xử lý</b> = chưa xuất kho và chưa hủy. <b>Đang giao</b> = đã xuất, chưa giao xong. <b>Trễ hạn</b> = thời gian hẹn giao trước thời điểm dữ liệu, chưa giao, chưa hủy.</li>
       <li><b>Báo cáo trễ theo đối tác</b> (Ahamove, GHTK), mỗi đơn chưa giao, chưa hủy được xếp vào một mức: <b>Trễ giao</b> = đã qua giờ hẹn; <b>Trễ xuất</b> = chưa xuất mà đã qua hạn xuất (giờ hẹn trừ số giờ chuẩn bị); <b>Cần xuất hôm nay</b> = hạn xuất rơi vào trong ngày của dữ liệu; còn lại là <b>Trong hạn</b>. Riêng GHTK không tính mức Trễ giao. Chuẩn hạn xuất: Ahamove trước giờ hẹn 1 giờ, GHTK trước giờ hẹn 72 giờ.</li>
       <li>Thời điểm dữ liệu lấy từ tên file (dạng ..._YYYYMMDD_HHMM.xlsx); nếu tên file không có thì lấy giờ lúc mở file.</li>
@@ -272,7 +272,7 @@ details ul{margin:6px 0 0;padding-left:1.2em;display:flex;flex-direction:column;
 const EMB = null;  /* Bản GitHub: không nhúng dữ liệu, mở trang rồi chọn file Excel */
 
 /* ---------- Trạng thái ---------- */
-const S = {rows: [], file: '', snap: 0, demo: true, sel: '', unit: 'don', huy: false, tra: false, downloads: null, lead: {Ahamove: 1, GHTK: 72}};  /* Chuẩn kho: Ahamove xuất trước giờ hẹn 1 giờ, GHTK trước 72 giờ */
+const S = {rows: [], file: '', snap: 0, demo: true, sel: '', unit: 'don', huy: false, tra: false, downloads: null, lead: {Ahamove: 1, GHTK: 72}, dropped: {huy: 0, tra: 0}};  /* Chuẩn kho: Ahamove xuất trước giờ hẹn 1 giờ, GHTK trước 72 giờ */
 const KHO_ORDER = ['Tân Bình', 'Bình Chánh', 'Thủ Đức'];
 const HT = ['Ahamove', 'GHTK', 'Giao tại siêu thị'];
 const $ = (id) => document.getElementById(id);
@@ -321,7 +321,7 @@ function loadEmbedded() {
   S.rows = E.rows.map((a) => makeRow({don: a[0], kho: E.kho[a[1]], hen: parseWall(a[2]), ht: E.ht[a[3]],
     xuat: !!(a[4] & 1), giao: !!(a[4] & 2), huy: !!(a[4] & 4), tra: !!(a[4] & 8), duyet: !!(a[4] & 16),
     sp: E.sp[a[5]][0], tenSp: E.sp[a[5]][1], sl: a[6]}));
-  S.file = E.file; S.snap = parseWall(E.snap); S.demo = true;
+  S.file = E.file; S.snap = parseWall(E.snap); S.demo = true; S.dropped = E.dropped || {huy: 0, tra: 0};
 }
 
 function snapFromName(name) {
@@ -347,19 +347,25 @@ function parseBook(buf, name) {
   const c = {don: col('Mã đơn hàng'), kho: col('Siêu thị xuất'), hen: col('Thời gian hẹn giao'), xuat: col('Trạng thái xuất'),
     giao: col('Trạng thái giao hàng'), ht: col('Hình thức giao hàng'), huy: col('Trạng thái hủy'), loai: col('Loại YCX'),
     duyet: col('Trạng thái duyệt'), sp: col('Mã sản phẩm'), tenSp: col('Tên sản phẩm'), sl: col('Số lượng')};
+  /* Bước lọc trước khi chạy: bỏ dòng "Đã hủy" (cột P - Trạng thái hủy) và "Đã trả" (cột AS - Tình trạng nhập trả) */
+  const pick = (name, letterIdx) => { const i = col(name); return i >= 0 ? i : (H.length > letterIdx ? letterIdx : -1); };
+  c.huyP = pick('Trạng thái hủy', 15);
+  c.traAS = pick('Tình trạng nhập trả của sản phẩm đổi với sản phẩm chính', 44);
   const g = (r, i) => i < 0 ? null : r[i];
-  const out = [];
+  const out = [], dropped = {huy: 0, tra: 0};
   for (let i = found.hi + 1; i < found.aoa.length; i++) {
     const r = found.aoa[i] || [];
     const don = String(g(r, c.don) == null ? '' : g(r, c.don)).trim();
     if (!don) continue;
+    if (norm(g(r, c.huyP)) === 'đã hủy') { dropped.huy++; continue; }
+    if (norm(g(r, c.traAS)) === 'đã trả') { dropped.tra++; continue; }
     out.push(makeRow({don, kho: String(g(r, c.kho) || '').trim(), hen: parseWall(g(r, c.hen)), ht: htOf(g(r, c.ht)),
       xuat: norm(g(r, c.xuat)) === 'đã xuất', giao: norm(g(r, c.giao)) === 'đã giao', huy: norm(g(r, c.huy)) === 'đã hủy',
       tra: /trả hàng/i.test(String(g(r, c.loai) || '')), duyet: norm(g(r, c.duyet)) !== 'chưa duyệt',
       sp: String(g(r, c.sp) || '').trim(), tenSp: String(g(r, c.tenSp) || '').trim(), sl: +g(r, c.sl) || 1}));
   }
-  if (!out.length) throw new Error('Sheet "' + found.sn + '" không có dòng đơn hàng nào.');
-  return out;
+  if (!out.length) throw new Error('Sheet "' + found.sn + '" không còn dòng đơn hàng nào sau khi bỏ dòng "Đã hủy" và "Đã trả".');
+  return {rows: out, dropped};
 }
 
 /* ---------- Tính toán ---------- */
@@ -502,14 +508,13 @@ function renderDue() {
 /* ---------- Tổng quan ---------- */
 function renderAll() {
   const B = base(), khos = khoList(S.rows);
-  const huyAll = cnt(S.rows.filter((r) => r.huy && (S.tra || !r.tra)));
   const traAll = cnt(S.rows.filter((r) => r.tra && (S.huy || !r.huy)));
   $('allTiles').replaceChildren(
     tile('Tổng ' + unitWord(), cnt(B), 'Theo các lựa chọn ở trên', 'main'),
     tile('Chưa xuất kho', cnt(B.filter(isCan)), 'Cần xử lý', 'warn'),
     tile('Đã xuất kho', cnt(B.filter((r) => r.xuat)), 'Gồm cả đã giao'),
     tile('Đã giao', cnt(B.filter((r) => r.giao)), 'Hoàn tất', 'ok'),
-    tile('Đã hủy', huyAll, S.huy ? 'Đang được tính vào tổng' : 'Không tính vào tổng'),
+    tile('Dòng đã loại khi nhập', S.dropped.huy + S.dropped.tra, fmt(S.dropped.huy) + ' dòng "Đã hủy" · ' + fmt(S.dropped.tra) + ' dòng "Đã trả"'),
     tile('Phiếu trả hàng NCC', traAll, S.tra ? 'Đang được tính vào tổng' : 'Không tính vào tổng'));
 
   const T = cnt(B) || 1;
@@ -764,10 +769,11 @@ async function handleFile(file) {
   if (!file) return;
   const msg = $('msg'); msg.className = 'msg'; msg.textContent = 'Đang đọc ' + file.name + '…';
   try {
-    const rows = parseBook(await file.arrayBuffer(), file.name);
-    S.rows = rows; S.file = file.name; S.demo = false; S.snap = snapFromName(file.name) || nowWall();
+    const res = parseBook(await file.arrayBuffer(), file.name), rows = res.rows;
+    S.rows = rows; S.dropped = res.dropped; S.file = file.name; S.demo = false; S.snap = snapFromName(file.name) || nowWall();
     pickDefaultDay(); render();
-    msg.textContent = 'Đã nhập ' + fmt(rows.length) + ' dòng, ' + fmt(new Set(rows.map((r) => r.don)).size) + ' đơn từ ' + file.name + '.';
+    msg.textContent = 'Đã nhập ' + fmt(rows.length) + ' dòng, ' + fmt(new Set(rows.map((r) => r.don)).size) + ' đơn từ ' + file.name +
+      '. Đã bỏ ' + fmt(res.dropped.huy) + ' dòng "Đã hủy" và ' + fmt(res.dropped.tra) + ' dòng "Đã trả".';
   } catch (e) {
     msg.className = 'msg err'; msg.textContent = (e && e.message) || 'Không đọc được file. Hãy dùng file .xlsx xuất từ hệ thống.';
   }
@@ -778,7 +784,6 @@ const dz = $('dropZone');
 ['dragleave', 'drop'].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); if (t === 'drop' || e.target === dz) dz.classList.remove('over'); }));
 document.addEventListener('drop', (e) => { dz.classList.remove('over'); const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) handleFile(f); });
 document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => { S.unit = b.dataset.unit; render(); }));
-$('chkHuy').addEventListener('change', (e) => { S.huy = e.target.checked; render(); });
 $('chkTra').addEventListener('change', (e) => { S.tra = e.target.checked; render(); });
 $('prevDay').addEventListener('click', () => { S.sel = addDay(S.sel, -1); render(); });
 $('nextDay').addEventListener('click', () => { S.sel = addDay(S.sel, 1); render(); });

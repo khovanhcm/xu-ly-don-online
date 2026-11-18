@@ -15,7 +15,9 @@
 - 3 kho: ĐMX_HCM - kho Online TT Tân Bình, HCM - Kho Online Bình Chánh, HCM - Kho Online Thủ Đức 1.
 
 ## Đã chốt với người dùng
-- Mặc định đếm theo **đơn** (mã đơn duy nhất), bỏ đơn đã hủy và phiếu "Yêu cầu xuất trả hàng mua"; có công tắc bật lại. Bảng Pivot cũ của họ đếm theo dòng SP và tính cả đơn hủy.
+- **Lọc trước khi chạy:** bỏ hẳn dòng có "Đã hủy" ở cột P (Trạng thái hủy) và "Đã trả" ở cột AS (Tình trạng nhập trả của sản phẩm đổi với sản phẩm chính). Không có công tắc tính lại đơn hủy. Thẻ "Dòng đã loại khi nhập" hiện số dòng đã bỏ.
+- Mặc định đếm theo **đơn** (mã đơn duy nhất), không tính phiếu "Yêu cầu xuất trả hàng mua" (có công tắc bật lại). Bảng Pivot cũ của họ đếm theo dòng SP và tính cả đơn hủy.
+- Mã nguồn: sửa `template.html` rồi chạy `build.py` để ra cả 2 bản (lưu ngoài repo); repo chỉ giữ bản GitHub.
 - Cần xử lý = chưa xuất, chưa hủy. Đang giao = đã xuất, chưa giao. Trễ hẹn = giờ hẹn trước thời điểm dữ liệu, chưa giao, chưa hủy.
 - Hạn xuất kho: **Ahamove trước giờ hẹn 1 giờ**, **GHTK trước giờ hẹn 72 giờ** (cố định, không có ô chỉnh).
 - Báo cáo trễ Ahamove: 4 mức (Trễ giao, Trễ xuất, Cần xuất hôm nay, Trong hạn). Báo cáo trễ GHTK: **không có mức Trễ giao** (3 mức).
