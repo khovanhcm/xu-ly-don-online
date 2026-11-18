@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xử lý đơn Online theo kho</title>
+<style>
+/* Bố cục: thanh điều khiển trên cùng; khối "Hạn giao trong ngày" là việc cần làm, bên dưới là tổng quan và danh sách trễ hạn. */
+@import url("https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&display=swap");
+/* Một bộ màu cố định theo mẫu báo cáo NCC: nền chàm đậm, thẻ màu oải hương, nút chàm. */
+:root{
+  --bg:#12074f; --bg-ink:#ffffff; --bg-muted:#c9c2ee;
+  --panel:#dbd6ef; --panel2:#e8e5f5; --line:#c3bbe0; --ink:#17132e; --muted:#5a5478;
+  --accent:#22105f; --accent-ink:#ffffff; --accent-soft:#cfc8ec;
+  --ok:#137a43; --warn:#b4530a; --warn-soft:#f6e3cf; --bad:#c0262d; --bad-soft:#f6d9dc;
+  --k0:#3c2bb8; --k1:#e0722b; --k2:#0f9488; --h0:#7a3fd1; --h1:#d63c7d; --h2:#8a84a8;
+  --grid:#cfc9e6; --axis:#a59dc8;
+  --font:"Lexend",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5}
+.hero{color:var(--bg-ink);display:flex;flex-wrap:wrap;gap:6px 24px;align-items:flex-end;justify-content:space-between}
+.eyebrow{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--bg-muted)}
+.hero h1{color:var(--bg-ink)}
+.toolbar{background:var(--panel);border-radius:14px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.sec-title{color:var(--bg-ink)}
+.wrap{max-width:1360px;margin:0 auto;padding:18px 16px 48px;display:flex;flex-direction:column;gap:22px}
+h1,h2,h3{margin:0;text-wrap:balance}
+h1{font-size:30px;font-weight:600;letter-spacing:-.01em;line-height:1.15}
+h2{font-size:18px;font-weight:650}
+h3{font-size:14px;font-weight:600;margin-bottom:8px}
+p{margin:0}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.num{font-variant-numeric:tabular-nums}
+
+.top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-end;justify-content:space-between}
+.stamp{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:13px;color:var(--bg-muted);margin-top:4px}
+.stamp b{color:var(--bg-ink);font-weight:600}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+.pill.demo{background:#ffd43b;color:#2a1d00}
+.pill.ok{background:#b9f0cf;color:#0d5a31}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{font:inherit;font-size:13px;font-weight:600;padding:7px 14px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.25)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn:focus-visible,.seg button:focus-visible,input:focus-visible,label.upload:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+label.upload input{position:absolute;opacity:0;width:1px;height:1px}
+.seg{display:inline-flex;gap:4px;border:1px solid var(--line);border-radius:99px;padding:3px;background:var(--panel2)}
+.seg button{font:inherit;font-size:13px;font-weight:600;padding:5px 12px;border:0;border-radius:99px;background:transparent;color:var(--ink);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);cursor:pointer;user-select:none}
+.drop{border:1.5px dashed #5a4ba3;border-radius:12px;padding:10px 14px;font-size:12px;color:var(--bg-muted);text-align:center}
+.drop.over{border-color:#ffffff;background:#24167a;color:#ffffff}
+.msg{font-size:13px;min-height:18px;color:var(--bg-muted)}
+.msg.err{color:#ffb3b8}
+
+.card{background:var(--panel);border:0;border-radius:14px;padding:16px;min-width:0}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px}
+.tile{background:var(--panel2);border:0;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile .lb{font-size:12px;color:var(--muted)}
+.tile .v{font-size:32px;font-weight:600;line-height:1.15;font-variant-numeric:tabular-nums}
+.tile .nt{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tile.warn{border-top:3px solid var(--warn)} .tile.warn .v{color:var(--warn)}
+.tile.bad{border-top:3px solid var(--bad)} .tile.bad .v{color:var(--bad)}
+.tile.ok .v{color:var(--ok)}
+.tile.main{border-top:3px solid var(--accent)}
+#allTiles .tile,#khoCards .card{background:var(--panel)}
+
+.due{border-left:5px solid #ffb347;display:flex;flex-direction:column;gap:14px}
+.due-head{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+.date{font:inherit;font-size:14px;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:5px 8px}
+.lead{font-size:15px;max-width:80ch}
+.lead b{font-variant-numeric:tabular-nums}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:18px}
+.khos{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+.kho h3{margin:0}
+.kho .big{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2}
+.mini{height:10px;border-radius:5px;overflow:hidden;display:flex;margin:8px 0 6px;background:var(--grid)}
+.kv{display:grid;grid-template-columns:1fr auto;gap:2px 12px;font-size:12px;font-variant-numeric:tabular-nums}
+.kv span:nth-child(even){text-align:right;font-weight:600}
+.dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-bottom:6px}
+.chart{position:relative;min-height:120px}
+.chart svg{display:block;overflow:visible}
+.chart .tick text{fill:var(--muted);font-size:11px}
+.chart .domain,.chart .tick line{stroke:var(--axis)}
+.chart .grid line{stroke:var(--grid)}
+.chart .grid .domain{display:none}
+.vl{fill:var(--ink);font-size:11px;font-variant-numeric:tabular-nums}
+.tip{position:absolute;pointer-events:none;background:#ffffff;border:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.14);border-radius:8px;padding:8px 10px;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;z-index:5}
+.tip b{display:block;margin-bottom:2px}
+.tip span{color:var(--muted)}
+.scroll{overflow-x:auto}
+table.t{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+table.t{background:var(--panel2);border-radius:10px;overflow:hidden}
+table.t th,table.t td{padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+table.t th{color:var(--muted);font-weight:600;font-size:12px;vertical-align:bottom}
+table.t th:first-child,table.t td:first-child,table.t .l{text-align:left}
+table.t tfoot td{font-weight:700;border-top:2px solid var(--ink);border-bottom:0}
+table.t td.s{font-weight:700}
+table.t td.w{color:var(--warn);font-weight:700}
+table.t td.b{color:var(--bad);font-weight:700}
+table.t tr.past td:first-child::after{content:" · đã qua giờ";color:var(--bad);font-size:11px;font-weight:600}
+.empty{padding:16px 0;color:var(--muted);font-size:13px}
+.partners{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:14px}
+@media (max-width:520px){.partners{grid-template-columns:1fr}}
+.ptn{display:flex;flex-direction:column;gap:12px;border-top:5px solid var(--pc)}
+.ptn-head{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between}
+.ptn-head h3{margin:0;font-size:16px}
+.lead-in{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted)}
+.lead-in b{color:var(--ink)}
+.lead-in input{width:56px;font:inherit;font-size:13px;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:4px 6px;text-align:right}
+.st{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap}
+.st.s1{background:var(--bad-soft);color:var(--bad)}
+.st.s2{background:#fbd9c4;color:#a2420a}
+.st.s3{background:var(--warn-soft);color:var(--warn)}
+.st.s4{background:#d5ecdf;color:var(--ok)}
+.tiles.sm{grid-template-columns:repeat(auto-fit,minmax(118px,1fr))}
+.tiles.sm .tile{padding:10px 12px}
+.tiles.sm .tile .v{font-size:24px}
+.list-box{max-height:380px;overflow:auto;border-radius:10px}
+.list-box thead th{position:sticky;top:0;background:var(--panel2);z-index:1}
+details{font-size:12px;color:var(--bg-muted)}
+details b{color:var(--bg-ink)}
+details summary{cursor:pointer;font-weight:600}
+details ul{margin:6px 0 0;padding-left:1.2em;display:flex;flex-direction:column;gap:4px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div>
+      <div class="eyebrow">Kho Online · Hồ Chí Minh</div>
+      <h1>Xử lý đơn Online theo kho</h1>
+      <div class="stamp">
+        <span class="pill demo" id="srcPill">File mẫu</span>
+        <span id="srcName"></span>
+        <span>· Dữ liệu lúc <b id="srcTime" class="num"></b></span>
+      </div>
+    </div>
+  </header>
+  <div class="toolbar">
+    <div class="ctl">
+      <div class="seg" role="group" aria-label="Đơn vị đếm">
+        <button type="button" data-unit="don" aria-pressed="true">Đếm theo đơn</button>
+        <button type="button" data-unit="dong" aria-pressed="false">Đếm theo dòng SP</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="chkHuy"> Tính cả đơn đã hủy</label>
+      <label class="chk"><input type="checkbox" id="chkTra"> Tính phiếu trả hàng NCC</label>
+    </div>
+    <label class="btn primary upload" id="uploadBtn">Chọn file Excel<input type="file" id="fileIn" accept=".xlsx,.xls,.csv"></label>
+  </div>
+  <div class="drop" id="dropZone">Kéo thả file "Chi tiết yêu cầu xuất" (.xlsx) vào đây để cập nhật. File chỉ được đọc trên máy anh/chị, không gửi đi đâu.</div>
+  <div class="msg" id="msg" role="status"></div>
+
+  <!-- HẠN GIAO TRONG NGÀY -->
+  <section class="card due" id="han-giao">
+    <div class="due-head">
+      <h2>Hạn giao &amp; xử lý theo ngày</h2>
+      <div class="ctl">
+        <button type="button" class="btn" id="prevDay">◀ Ngày trước</button>
+        <input type="date" class="date" id="dayIn" aria-label="Ngày hẹn giao">
+        <button type="button" class="btn" id="nextDay">Ngày sau ▶</button>
+        <button type="button" class="btn" id="todayBtn">Hôm nay</button>
+        <button type="button" class="btn" id="exportLate2">Xuất trễ hẹn</button>
+        <button type="button" class="btn primary" id="exportDay">Tải Excel cần xử lý</button>
+      </div>
+    </div>
+    <p class="lead" id="dueLead"></p>
+    <div class="tiles" id="dueTiles"></div>
+    <div class="scroll"><table class="t" id="dueKho"></table></div>
+    <div class="grid2">
+      <div>
+        <h3>Khung giờ hẹn giao trong ngày</h3>
+        <div class="legend" id="legKho1"></div>
+        <div class="chart" id="slotChart"></div>
+      </div>
+      <div>
+        <h3>Lịch xử lý theo khung giờ</h3>
+        <div class="scroll"><table class="t" id="slotTable"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BÁO CÁO TRỄ THEO ĐỐI TÁC -->
+  <section id="tre-doi-tac" style="display:flex;flex-direction:column;gap:12px">
+    <h2 class="sec-title">Báo cáo trễ đơn theo đối tác giao</h2>
+    <div class="partners">
+      <div class="card ptn" id="ptn-aha" style="--pc:var(--h0)">
+        <div class="ptn-head">
+          <h3>Ahamove · hỏa tốc</h3>
+          <div class="ctl">
+            <span class="lead-in">Chuẩn: xuất trước giờ hẹn <b>1 giờ</b></span>
+            <button type="button" class="btn primary" id="expAha">Xuất Excel</button>
+          </div>
+        </div>
+        <div class="tiles sm" id="ahaTiles"></div>
+        <div class="scroll"><table class="t" id="ahaKho"></table></div>
+        <h3 style="margin:4px 0 0">Lịch xử lý Ahamove theo khung giờ · ngày <span id="ahaSlotDay"></span> <span class="muted small">(đổi ngày ở khối Hạn giao)</span></h3>
+        <div class="scroll"><table class="t" id="ahaSlot"></table></div>
+        <h3 style="margin:4px 0 0">Đơn trễ và cần xuất hôm nay</h3>
+        <div class="list-box"><table class="t" id="ahaList"></table></div>
+      </div>
+      <div class="card ptn" id="ptn-ghtk" style="--pc:var(--h1)">
+        <div class="ptn-head">
+          <h3>GHTK</h3>
+          <div class="ctl">
+            <span class="lead-in">Chuẩn: xuất trước giờ hẹn <b>72 giờ</b></span>
+            <button type="button" class="btn primary" id="expGhtk">Xuất Excel</button>
+          </div>
+        </div>
+        <div class="tiles sm" id="ghtkTiles"></div>
+        <div class="scroll"><table class="t" id="ghtkKho"></table></div>
+        <h3 style="margin:4px 0 0">Đơn trễ và cần xuất hôm nay</h3>
+        <div class="list-box"><table class="t" id="ghtkList"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TỔNG QUAN -->
+  <section id="tong-quan" style="display:flex;flex-direction:column;gap:14px">
+    <h2 class="sec-title">Tổng quan toàn bộ file</h2>
+    <div class="tiles" id="allTiles"></div>
+    <div class="khos" id="khoCards"></div>
+    <div class="card">
+      <h3>Số lượng theo ngày hẹn giao <span class="muted small">(bấm vào cột để xem chi tiết ngày đó)</span></h3>
+      <div class="legend" id="legKho2"></div>
+      <div class="chart" id="dayChart" style="min-height:260px"></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h3>Hình thức giao theo kho</h3>
+        <div class="legend" id="legHt"></div>
+        <div class="chart" id="htChart"></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <h3 style="margin:0">Đơn trễ hẹn khách <span class="muted small">(hẹn trước thời điểm dữ liệu, chưa giao)</span></h3>
+          <button type="button" class="btn primary" id="exportLate">Xuất Excel trễ hẹn</button>
+        </div>
+        <div class="scroll"><table class="t" id="lateTable"></table></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Bảng tổng hợp theo kho và trạng thái xuất</h3>
+      <div class="scroll"><table class="t" id="pivot"></table></div>
+    </div>
+  </section>
+
+  <details id="ghi-chu">
+    <summary>Cách tính số liệu</summary>
+    <ul>
+      <li>Đọc sheet "Chi tiết yêu cầu xuất": Mã đơn hàng, Siêu thị xuất, Thời gian hẹn giao, Hình thức giao hàng, Trạng thái xuất / giao hàng / hủy, Loại YCX, Mã và tên sản phẩm, Số lượng. Thông tin khách hàng không được đọc.</li>
+      <li>Mặc định đếm theo <b>đơn hàng</b> (mỗi mã đơn tính 1), bỏ đơn đã hủy và phiếu "Yêu cầu xuất trả hàng mua" (trả hàng nhà cung cấp). Bảng Pivot cũ đếm theo dòng sản phẩm và tính cả đơn hủy: bật "Đếm theo dòng SP" và hai ô tích để ra đúng số đó.</li>
+      <li><b>Cần xử lý</b> = chưa xuất kho và chưa hủy. <b>Đang giao</b> = đã xuất, chưa giao xong. <b>Trễ hạn</b> = thời gian hẹn giao trước thời điểm dữ liệu, chưa giao, chưa hủy.</li>
+      <li><b>Báo cáo trễ theo đối tác</b> (Ahamove, GHTK), mỗi đơn chưa giao, chưa hủy được xếp vào một mức: <b>Trễ giao</b> = đã qua giờ hẹn; <b>Trễ xuất</b> = chưa xuất mà đã qua hạn xuất (giờ hẹn trừ số giờ chuẩn bị); <b>Cần xuất hôm nay</b> = hạn xuất rơi vào trong ngày của dữ liệu; còn lại là <b>Trong hạn</b>. Chuẩn hạn xuất: Ahamove trước giờ hẹn 1 giờ, GHTK trước giờ hẹn 72 giờ.</li>
+      <li>Thời điểm dữ liệu lấy từ tên file (dạng ..._YYYYMMDD_HHMM.xlsx); nếu tên file không có thì lấy giờ lúc mở file.</li>
+    </ul>
+  </details>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+"use strict";
+const EMB = null;  /* Bản GitHub: không nhúng dữ liệu, mở trang rồi chọn file Excel */
+
+/* ---------- Trạng thái ---------- */
+const S = {rows: [], file: '', snap: 0, demo: true, sel: '', unit: 'don', huy: false, tra: false, downloads: null, lead: {Ahamove: 1, GHTK: 72}};  /* Chuẩn kho: Ahamove xuất trước giờ hẹn 1 giờ, GHTK trước 72 giờ */
+const KHO_ORDER = ['Tân Bình', 'Bình Chánh', 'Thủ Đức'];
+const HT = ['Ahamove', 'GHTK', 'Giao tại siêu thị'];
+const $ = (id) => document.getElementById(id);
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const kColor = (i) => css('--k' + Math.min(i, 2));
+const hColor = (i) => css('--h' + Math.min(i, 2));
+const fmt = (n) => (+n || 0).toLocaleString('vi-VN');
+const pad = (n) => String(n).padStart(2, '0');
+
+/* Thời gian lưu dạng "giờ treo tường" (ms, đọc bằng getUTC*) để không lệch múi giờ */
+const wallOf = (y, mo, d, h = 0, mi = 0, s = 0) => Date.UTC(y, mo - 1, d, h, mi, s);
+const nowWall = () => { const n = new Date(); return wallOf(n.getFullYear(), n.getMonth() + 1, n.getDate(), n.getHours(), n.getMinutes(), n.getSeconds()); };
+const isoDay = (w) => { const d = new Date(w); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); };
+const hm = (w) => { const d = new Date(w); return pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()); };
+const dmy = (iso) => iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '';
+const dm = (iso) => iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : '';
+const fullTime = (w) => w ? dmy(isoDay(w)) + ' ' + hm(w) : '';
+const shortTime = (w) => w ? dm(isoDay(w)) + ' ' + hm(w) : '';
+const addDay = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const todayIso = () => isoDay(nowWall());
+
+function parseWall(v) {
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return Math.round((v - 25569) * 86400000 / 1000) * 1000;
+  if (v instanceof Date) return wallOf(v.getFullYear(), v.getMonth() + 1, v.getDate(), v.getHours(), v.getMinutes(), v.getSeconds());
+  const s = String(v).trim();
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(s);
+  if (m) return wallOf(+m[1], +m[2], +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(s);
+  if (m) return wallOf(+m[3], +m[2], +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+  return 0;
+}
+const htOf = (s) => { s = String(s || ''); return /ahamove/i.test(s) ? 'Ahamove' : /ghtk/i.test(s) ? 'GHTK' : /siêu thị/i.test(s) ? 'Giao tại siêu thị' : (s || 'Khác'); };
+const khoShort = (k) => String(k || '').replace(/^.*kho online\s*/i, '').trim() || String(k || '(Không rõ kho)');
+const khoRank = (k) => { const i = KHO_ORDER.findIndex((s) => String(k).includes(s)); return i < 0 ? 9 : i; };
+
+function makeRow(o) {
+  const w = o.hen;
+  return {don: o.don, kho: o.kho, ten: khoShort(o.kho), hen: w, ngay: w ? isoDay(w) : '', gio: w ? hm(w) : '',
+    ht: o.ht, xuat: o.xuat, giao: o.giao, huy: o.huy, tra: o.tra, duyet: o.duyet, sp: o.sp, tenSp: o.tenSp, sl: o.sl};
+}
+
+function loadEmbedded() {
+  const E = EMB;
+  if (!E) { S.rows = []; S.file = 'Chưa chọn file'; S.snap = nowWall(); S.demo = true; return; }
+  S.rows = E.rows.map((a) => makeRow({don: a[0], kho: E.kho[a[1]], hen: parseWall(a[2]), ht: E.ht[a[3]],
+    xuat: !!(a[4] & 1), giao: !!(a[4] & 2), huy: !!(a[4] & 4), tra: !!(a[4] & 8), duyet: !!(a[4] & 16),
+    sp: E.sp[a[5]][0], tenSp: E.sp[a[5]][1], sl: a[6]}));
+  S.file = E.file; S.snap = parseWall(E.snap); S.demo = true;
+}
+
+function snapFromName(name) {
+  const m = /(20\d{2})(\d{2})(\d{2})[_\- ]?(\d{2})(\d{2})/.exec(name || '');
+  return m ? wallOf(+m[1], +m[2], +m[3], +m[4], +m[5]) : 0;
+}
+
+const norm = (s) => String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' ');
+function parseBook(buf, name) {
+  const wb = XLSX.read(buf, {type: 'array'});
+  let found = null;
+  for (const sn of wb.SheetNames) {
+    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header: 1, raw: true, defval: null});
+    const hi = aoa.slice(0, 15).findIndex((r) => (r || []).some((c) => norm(c) === 'mã đơn hàng'));
+    if (hi >= 0) { found = {aoa, hi, sn}; break; }
+  }
+  if (!found) throw new Error('Không tìm thấy cột "Mã đơn hàng". Hãy dùng file "Chi tiết yêu cầu xuất" xuất từ hệ thống.');
+  const H = found.aoa[found.hi].map(norm);
+  const col = (n) => H.indexOf(norm(n));
+  const need = ['Mã đơn hàng', 'Siêu thị xuất', 'Thời gian hẹn giao', 'Trạng thái xuất', 'Trạng thái giao hàng', 'Hình thức giao hàng'];
+  const miss = need.filter((n) => col(n) < 0);
+  if (miss.length) throw new Error('File thiếu cột: ' + miss.join(', ') + '.');
+  const c = {don: col('Mã đơn hàng'), kho: col('Siêu thị xuất'), hen: col('Thời gian hẹn giao'), xuat: col('Trạng thái xuất'),
+    giao: col('Trạng thái giao hàng'), ht: col('Hình thức giao hàng'), huy: col('Trạng thái hủy'), loai: col('Loại YCX'),
+    duyet: col('Trạng thái duyệt'), sp: col('Mã sản phẩm'), tenSp: col('Tên sản phẩm'), sl: col('Số lượng')};
+  const g = (r, i) => i < 0 ? null : r[i];
+  const out = [];
+  for (let i = found.hi + 1; i < found.aoa.length; i++) {
+    const r = found.aoa[i] || [];
+    const don = String(g(r, c.don) == null ? '' : g(r, c.don)).trim();
+    if (!don) continue;
+    out.push(makeRow({don, kho: String(g(r, c.kho) || '').trim(), hen: parseWall(g(r, c.hen)), ht: htOf(g(r, c.ht)),
+      xuat: norm(g(r, c.xuat)) === 'đã xuất', giao: norm(g(r, c.giao)) === 'đã giao', huy: norm(g(r, c.huy)) === 'đã hủy',
+      tra: /trả hàng/i.test(String(g(r, c.loai) || '')), duyet: norm(g(r, c.duyet)) !== 'chưa duyệt',
+      sp: String(g(r, c.sp) || '').trim(), tenSp: String(g(r, c.tenSp) || '').trim(), sl: +g(r, c.sl) || 1}));
+  }
+  if (!out.length) throw new Error('Sheet "' + found.sn + '" không có dòng đơn hàng nào.');
+  return out;
+}
+
+/* ---------- Tính toán ---------- */
+const base = () => S.rows.filter((r) => (S.huy || !r.huy) && (S.tra || !r.tra));
+const cnt = (list) => S.unit === 'don' ? new Set(list.map((r) => r.don)).size : list.length;
+const isCan = (r) => !r.xuat && !r.huy;
+const isDang = (r) => r.xuat && !r.giao && !r.huy;
+const isLate = (r) => r.hen && r.hen < S.snap && !r.giao && !r.huy;
+const unitWord = () => S.unit === 'don' ? 'đơn' : 'dòng';
+const khoList = (rows) => [...new Set(rows.map((r) => r.kho))].sort((a, b) => khoRank(a) - khoRank(b) || a.localeCompare(b, 'vi'));
+
+/* ---------- Vẽ chung ---------- */
+function el(tag, attrs, text) {
+  const e = document.createElement(tag);
+  if (attrs) for (const k in attrs) { if (k === 'class') e.className = attrs[k]; else if (k === 'style') e.style.cssText = attrs[k]; else e.setAttribute(k, attrs[k]); }
+  if (text != null) e.textContent = text;
+  return e;
+}
+function tile(lb, v, nt, cls) {
+  const t = el('div', {class: 'tile ' + (cls || '')});
+  t.append(el('span', {class: 'lb'}, lb), el('span', {class: 'v'}, fmt(v)), el('span', {class: 'nt'}, nt || ''));
+  return t;
+}
+function legend(box, items) {
+  box.replaceChildren(...items.map(([t, c]) => { const s = el('span'); const d = el('i', {class: 'dot'}); d.style.background = c; s.append(d, document.createTextNode(t)); return s; }));
+}
+function table(t, head, rows, opts) {
+  opts = opts || {};
+  t.replaceChildren();
+  const th = el('thead'), tr = el('tr');
+  head.forEach((h, i) => { const c = el('th', (opts.left || []).includes(i) ? {class: 'l'} : null); h.split('\n').forEach((p, j) => { if (j) c.append(el('br')); c.append(document.createTextNode(p)); }); tr.append(c); });
+  th.append(tr); t.append(th);
+  const tb = el('tbody');
+  if (!rows.length) { const r = el('tr'), c = el('td', {colspan: head.length, class: 'l'}, opts.empty || 'Không có dữ liệu.'); c.style.color = 'var(--muted)'; r.append(c); tb.append(r); }
+  rows.forEach((row, ri) => {
+    const r = el('tr', opts.rowClass ? {class: opts.rowClass(ri) || ''} : null);
+    row.forEach((v, i) => {
+      const cls = [(opts.left || []).includes(i) ? 'l' : '', opts.cellClass ? opts.cellClass(ri, i, v) || '' : ''].join(' ').trim();
+      r.append(el('td', cls ? {class: cls} : null, typeof v === 'number' ? (v === 0 && opts.dotZero ? '·' : fmt(v)) : v));
+    });
+    tb.append(r);
+  });
+  t.append(tb);
+  if (opts.foot) { const tf = el('tfoot'), r = el('tr'); opts.foot.forEach((v, i) => r.append(el('td', (opts.left || []).includes(i) ? {class: 'l'} : null, typeof v === 'number' ? fmt(v) : v))); tf.append(r); t.append(tf); }
+}
+function makeTip(box) {
+  const tip = el('div', {class: 'tip'}); tip.hidden = true; box.append(tip);
+  return {
+    show(ev, title, lines) {
+      tip.replaceChildren(el('b', null, title));
+      for (const [k, v] of lines) { const d = el('div'); d.append(el('span', null, k + ': '), document.createTextNode(v)); tip.append(d); }
+      tip.hidden = false;
+      const b = box.getBoundingClientRect();
+      let x = ev.clientX - b.left + 12; const w = tip.offsetWidth;
+      if (x + w > b.width) x = Math.max(0, ev.clientX - b.left - w - 12);
+      tip.style.left = x + 'px'; tip.style.top = Math.max(0, ev.clientY - b.top - 10) + 'px';
+    },
+    hide() { tip.hidden = true; }
+  };
+}
+function textW(svg, s) { const t = svg.append('text').attr('class', 'vl').text(s); const w = t.node().getComputedTextLength() || s.length * 7; t.remove(); return w; }
+
+/* Thanh ngang chồng: mỗi dòng một nhãn, chia theo nhóm màu */
+function hbars(box, rows, keys, opts) {
+  box.replaceChildren();
+  if (!rows.length) { box.append(el('p', {class: 'empty'}, opts.empty || 'Không có dữ liệu.')); return; }
+  const W = Math.max(260, box.clientWidth), barH = opts.barH || 22, gap = opts.gap || 10, labelTop = !!opts.labelTop;
+  const rowH = barH + gap + (labelTop ? 16 : 0), H = rows.length * rowH;
+  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', opts.aria || '');
+  const L = labelTop ? 0 : d3.max(rows, (r) => textW(svg, r.label)) + 10;
+  const max = d3.max(rows, (r) => r.total) || 1;
+  const R = textW(svg, fmt(max)) + 10;
+  const x = d3.scaleLinear().domain([0, max]).range([L, W - R]);
+  const tip = makeTip(box);
+  rows.forEach((r, i) => {
+    const top = i * rowH + (labelTop ? 16 : 0);
+    svg.append('text').attr('class', 'vl').attr('x', 0).attr('y', labelTop ? top - 5 : top + barH / 2 + 4).style('font-weight', labelTop ? 600 : 400).text(r.label);
+    let acc = 0;
+    keys.forEach((k, j) => {
+      const v = r.parts[j] || 0; if (!v) return;
+      const x0 = x(acc), w = x(acc + v) - x0;
+      svg.append('rect').attr('x', x0).attr('y', top).attr('width', Math.max(0, w)).attr('height', barH).attr('rx', 2).style('fill', k.color)
+        .on('pointermove', (ev) => tip.show(ev, r.label + ' · ' + fmt(r.total) + ' ' + unitWord(), keys.map((kk, jj) => [kk.name, fmt(r.parts[jj] || 0)]).concat(r.extra || [])))
+        .on('pointerleave', () => tip.hide());
+      const lab = fmt(v);
+      if (w > lab.length * 7.5 + 10) svg.append('text').attr('x', x0 + w / 2).attr('y', top + barH / 2 + 4).attr('text-anchor', 'middle').attr('class', 'vl').style('fill', '#fff').style('pointer-events', 'none').text(lab);
+      acc += v;
+    });
+    svg.append('text').attr('class', 'vl').attr('x', x(acc) + 6).attr('y', top + barH / 2 + 4).style('font-weight', 700).text(fmt(r.total));
+  });
+}
+
+/* ---------- Khối hạn giao ---------- */
+function renderDue() {
+  const B = base(), sel = S.sel, day = B.filter((r) => r.ngay === sel), khos = khoList(S.rows);
+  $('dayIn').value = sel;
+  const tong = cnt(day), can = cnt(day.filter(isCan)), dang = cnt(day.filter(isDang)), xong = cnt(day.filter((r) => r.giao));
+  const late = cnt(B.filter(isLate));
+  const huyDay = cnt(S.rows.filter((r) => r.ngay === sel && r.huy && (S.tra || !r.tra)));
+  const slots = d3.rollups(day, (v) => v, (r) => r.gio).sort((a, b) => a[0] < b[0] ? -1 : 1);
+  const lead = $('dueLead'); lead.replaceChildren();
+  const b = (t) => el('b', null, t);
+  if (!tong) {
+    lead.append('Ngày ', b(dmy(sel)), ' không có ' + unitWord() + ' hẹn giao.');
+  } else {
+    const live = slots.map(([g, v]) => [g, cnt(v.filter(isCan))]).filter((x) => x[1] > 0);
+    const busiest = slots.map(([g, v]) => [g, cnt(v)]).sort((a, c) => c[1] - a[1])[0];
+    lead.append('Ngày ', b(dmy(sel)), ' có ', b(fmt(tong)), ' ' + unitWord() + ' hẹn giao; ', b(fmt(can)), ' ' + unitWord() + ' chưa xuất kho cần xử lý');
+    if (live.length) lead.append(', bắt đầu từ khung ', b(live[0][0]));
+    lead.append('. Khung đông nhất ', b(busiest[0]), ' với ', b(fmt(busiest[1])), ' ' + unitWord() + '.');
+    if (late) lead.append(' Có ', b(fmt(late)), ' ' + unitWord() + ' đã trễ hạn.');
+  }
+  $('dueTiles').replaceChildren(
+    tile('Hẹn giao trong ngày', tong, huyDay && !S.huy ? 'Đã loại ' + fmt(huyDay) + ' ' + unitWord() + ' hủy' : 'Cả ' + khos.length + ' kho', 'main'),
+    tile('Chưa xuất · cần xử lý', can, tong ? Math.round(can / tong * 100) + '% số hẹn giao' : '', 'warn'),
+    tile('Đã xuất · đang giao', dang, 'Đã bàn giao, chưa giao xong'),
+    tile('Đã giao', xong, 'Hoàn tất', 'ok'),
+    tile('Trễ hạn chưa giao', late, 'Hẹn trước ' + fullTime(S.snap), late ? 'bad' : ''));
+
+  const rows = khos.map((k) => {
+    const d = day.filter((r) => r.kho === k);
+    return [khoShort(k), cnt(d), cnt(d.filter((r) => r.ht === 'Ahamove')), cnt(d.filter((r) => r.ht === 'GHTK')), cnt(d.filter((r) => r.ht === 'Giao tại siêu thị')),
+      cnt(d.filter(isCan)), cnt(d.filter(isDang)), cnt(d.filter((r) => r.giao)), cnt(B.filter((r) => r.kho === k && isLate(r)))];
+  });
+  table($('dueKho'), ['Kho', 'Hẹn giao', 'Ahamove', 'GHTK', 'Siêu thị', 'Chưa xuất\n(cần xử lý)', 'Đang giao', 'Đã giao', 'Trễ hạn'], rows, {
+    left: [0], cellClass: (ri, i, v) => i === 1 ? 's' : (i === 5 && v > 0) ? 'w' : (i === 8 && v > 0) ? 'b' : '',
+    foot: ['Tổng', tong, cnt(day.filter((r) => r.ht === 'Ahamove')), cnt(day.filter((r) => r.ht === 'GHTK')), cnt(day.filter((r) => r.ht === 'Giao tại siêu thị')), can, dang, xong, late]});
+
+  legend($('legKho1'), khos.map((k, i) => [khoShort(k), kColor(khoRank(k))]));
+  const keys = khos.map((k) => ({name: khoShort(k), color: kColor(khoRank(k))}));
+  hbars($('slotChart'), slots.map(([g, v]) => ({label: g, total: cnt(v), parts: khos.map((k) => cnt(v.filter((r) => r.kho === k))),
+    extra: [['Chưa xuất', fmt(cnt(v.filter(isCan)))]]})), keys, {aria: 'Số lượng theo khung giờ hẹn giao, chia theo kho', empty: 'Không có ' + unitWord() + ' hẹn giao trong ngày này.'});
+  const slotRows = slots.map(([g, v]) => [g, ...khos.map((k) => cnt(v.filter((r) => r.kho === k))), cnt(v), cnt(v.filter(isCan))]);
+  table($('slotTable'), ['Khung giờ', ...khos.map(khoShort), 'Tổng', 'Chưa xuất'], slotRows, {
+    left: [0], dotZero: true, empty: 'Không có ' + unitWord() + ' hẹn giao trong ngày này.',
+    rowClass: (ri) => { const w = wallOf(+sel.slice(0, 4), +sel.slice(5, 7), +sel.slice(8, 10), +slots[ri][0].slice(0, 2), +slots[ri][0].slice(3, 5)); return w < S.snap && slotRows[ri][slotRows[ri].length - 1] > 0 ? 'past' : ''; },
+    cellClass: (ri, i, v) => i === khos.length + 1 ? 's' : (i === khos.length + 2 && v > 0) ? 'w' : ''});
+}
+
+/* ---------- Tổng quan ---------- */
+function renderAll() {
+  const B = base(), khos = khoList(S.rows);
+  const huyAll = cnt(S.rows.filter((r) => r.huy && (S.tra || !r.tra)));
+  const traAll = cnt(S.rows.filter((r) => r.tra && (S.huy || !r.huy)));
+  $('allTiles').replaceChildren(
+    tile('Tổng ' + unitWord(), cnt(B), 'Theo các lựa chọn ở trên', 'main'),
+    tile('Chưa xuất kho', cnt(B.filter(isCan)), 'Cần xử lý', 'warn'),
+    tile('Đã xuất kho', cnt(B.filter((r) => r.xuat)), 'Gồm cả đã giao'),
+    tile('Đã giao', cnt(B.filter((r) => r.giao)), 'Hoàn tất', 'ok'),
+    tile('Đã hủy', huyAll, S.huy ? 'Đang được tính vào tổng' : 'Không tính vào tổng'),
+    tile('Phiếu trả hàng NCC', traAll, S.tra ? 'Đang được tính vào tổng' : 'Không tính vào tổng'));
+
+  const T = cnt(B) || 1;
+  $('khoCards').replaceChildren(...khos.map((k) => {
+    const d = B.filter((r) => r.kho === k), tk = cnt(d);
+    const days = d3.rollups(d, (v) => cnt(v), (r) => r.ngay).sort((a, b) => b[1] - a[1]);
+    const c = el('div', {class: 'card kho'});
+    c.append(el('h3', null, khoShort(k)), el('div', {class: 'small muted'}, k));
+    const big = el('div', {class: 'big'}, fmt(tk)); c.append(big, el('div', {class: 'small muted'}, unitWord() + ' · ' + (Math.round(tk / T * 1000) / 10).toLocaleString('vi-VN') + '% tổng'));
+    const mini = el('div', {class: 'mini'});
+    HT.forEach((h, i) => { const v = cnt(d.filter((r) => r.ht === h)); if (v) { const s = el('span'); s.style.width = (v / (tk || 1) * 100) + '%'; s.style.background = hColor(i); mini.append(s); } });
+    c.append(mini);
+    const kv = el('div', {class: 'kv'});
+    const add = (lab, v, color, cls) => { const s = el('span'); if (color) { const dt = el('i', {class: 'dot'}); dt.style.background = color; s.append(dt); } s.append(document.createTextNode(lab)); const n = el('span', null, v); if (cls) n.style.color = cls; kv.append(s, n); };
+    HT.forEach((h, i) => add(h, fmt(cnt(d.filter((r) => r.ht === h))), hColor(i)));
+    add('Chưa xuất kho', fmt(cnt(d.filter(isCan))), null, 'var(--warn)');
+    if (days[0]) add('Ngày đông nhất ' + dm(days[0][0]), fmt(days[0][1]));
+    c.append(kv);
+    return c;
+  }));
+
+  legend($('legKho2'), khos.map((k) => [khoShort(k), kColor(khoRank(k))]));
+  drawDays(B, khos);
+  legend($('legHt'), HT.map((h, i) => [h, hColor(i)]));
+  hbars($('htChart'), khos.map((k) => { const d = B.filter((r) => r.kho === k); return {label: khoShort(k), total: cnt(d), parts: HT.map((h) => cnt(d.filter((r) => r.ht === h)))}; }),
+    HT.map((h, i) => ({name: h, color: hColor(i)})), {labelTop: true, barH: 28, gap: 14, aria: 'Số lượng theo hình thức giao của từng kho'});
+
+  const late = d3.rollups(B.filter(isLate), (v) => v, (r) => r.don).map(([don, v]) => v[0]).sort((a, b) => a.hen - b.hen);
+  table($('lateTable'), ['Mã đơn hàng', 'Kho', 'Hẹn giao', 'Trễ', 'Hình thức', 'Trạng thái'], late.slice(0, 200).map((r) => [r.don, r.ten, fullTime(r.hen), lateText(r.hen), r.ht, r.xuat ? 'Đã xuất' : 'Chưa xuất']),
+    {left: [0, 1, 4, 5], cellClass: (ri, i) => i === 3 ? 'b' : '', empty: 'Không có đơn trễ hẹn tại thời điểm dữ liệu.'});
+  if (late.length > 200) $('lateTable').append(el('caption', {style: 'caption-side:bottom;text-align:left;padding-top:6px;font-size:12px;color:var(--muted)'}, 'Đang hiện 200 / ' + fmt(late.length) + ' đơn. File Excel có đủ toàn bộ.'));
+
+  const piv = khos.map((k) => {
+    const d = B.filter((r) => r.kho === k), f = (h, x) => cnt(d.filter((r) => r.ht === h && r.xuat === x));
+    return [khoShort(k), f('Ahamove', false), f('Ahamove', true), f('GHTK', false), f('GHTK', true), f('Giao tại siêu thị', false), cnt(d.filter((r) => r.giao)), cnt(d)];
+  });
+  const fa = (h, x) => cnt(B.filter((r) => r.ht === h && r.xuat === x));
+  table($('pivot'), ['Kho', 'Ahamove\nchưa xuất', 'Ahamove\nđã xuất', 'GHTK\nchưa xuất', 'GHTK\nđã xuất', 'Siêu thị\nchưa xuất', 'Đã giao', 'Tổng'], piv,
+    {left: [0], cellClass: (ri, i) => i === 7 ? 's' : '', foot: ['Tổng', fa('Ahamove', false), fa('Ahamove', true), fa('GHTK', false), fa('GHTK', true), fa('Giao tại siêu thị', false), cnt(B.filter((r) => r.giao)), cnt(B)]});
+}
+
+/* ---------- Báo cáo trễ theo đối tác ---------- */
+const ST = [
+  {id: 1, name: 'Trễ giao', cls: 's1', note: 'Đã qua giờ hẹn, chưa giao'},
+  {id: 2, name: 'Trễ xuất', cls: 's2', note: 'Chưa xuất, đã qua hạn xuất'},
+  {id: 3, name: 'Cần xuất hôm nay', cls: 's3', note: 'Hạn xuất trong ngày dữ liệu'},
+  {id: 4, name: 'Trong hạn', cls: 's4', note: 'Còn thời gian hoặc đã xuất'}];
+function statusOf(r, leadH) {
+  const deadline = r.hen - leadH * 3600000;
+  const endDay = Date.UTC(new Date(S.snap).getUTCFullYear(), new Date(S.snap).getUTCMonth(), new Date(S.snap).getUTCDate(), 23, 59, 59);
+  if (r.hen < S.snap) return {st: 1, deadline};
+  if (!r.xuat && deadline < S.snap) return {st: 2, deadline};
+  if (!r.xuat && deadline <= endDay) return {st: 3, deadline};
+  return {st: 4, deadline};
+}
+function partnerRows(ht) {
+  const lead = S.lead[ht];
+  return base().filter((r) => r.ht === ht && !r.giao && !r.huy && r.hen).map((r) => Object.assign({}, r, statusOf(r, lead)));
+}
+const stPill = (id) => { const t = ST[id - 1]; return el('span', {class: 'st ' + t.cls}, t.name); };
+function renderPartner(ht, pre) {
+  const rows = partnerRows(ht), khos = khoList(S.rows);
+  $(pre + 'Tiles').replaceChildren(...ST.map((t) => tile(t.name, cnt(rows.filter((r) => r.st === t.id)), t.note,
+    t.id === 1 ? (cnt(rows.filter((r) => r.st === 1)) ? 'bad' : '') : t.id === 2 ? (cnt(rows.filter((r) => r.st === 2)) ? 'bad' : '') : t.id === 3 ? 'warn' : 'ok')));
+  const kr = khos.map((k) => { const d = rows.filter((r) => r.kho === k); return [khoShort(k), cnt(d), ...ST.map((t) => cnt(d.filter((r) => r.st === t.id)))]; });
+  table($(pre + 'Kho'), ['Kho', 'Chưa giao', 'Trễ giao', 'Trễ xuất', 'Cần xuất\nhôm nay', 'Trong hạn'], kr, {
+    left: [0], cellClass: (ri, i, v) => i === 1 ? 's' : ((i === 2 || i === 3) && v > 0) ? 'b' : (i === 4 && v > 0) ? 'w' : '',
+    foot: ['Tổng', cnt(rows), ...ST.map((t) => cnt(rows.filter((r) => r.st === t.id)))]});
+  const list = d3.rollups(rows.filter((r) => r.st < 4), (v) => v[0], (r) => r.don).map((x) => x[1]).sort((a, b) => a.st - b.st || a.deadline - b.deadline);
+  const t = $(pre + 'List');
+  table(t, ['Mức', 'Mã đơn hàng', 'Kho', 'Giờ hẹn', 'Hạn xuất', 'Xuất kho'], list.slice(0, 60).map((r) => ['', r.don, r.ten, shortTime(r.hen), shortTime(r.deadline), r.xuat ? 'Đã xuất' : 'Chưa xuất']),
+    {left: [0, 1, 2, 5], empty: 'Không có đơn trễ hoặc cần xuất hôm nay tại ' + fullTime(S.snap) + '.'});
+  t.querySelectorAll('tbody tr').forEach((tr, i) => { if (list[i]) tr.firstChild.replaceChildren(stPill(list[i].st)); });
+  if (list.length > 60) t.append(el('caption', {style: 'caption-side:bottom;text-align:left;padding-top:6px;font-size:12px;color:var(--muted)'}, 'Đang hiện 60 / ' + fmt(list.length) + ' đơn. File Excel có đủ toàn bộ.'));
+}
+/* Lịch xử lý Ahamove theo khung giờ cho ngày đang chọn */
+function ahaSlots() {
+  const sel = S.sel, khos = khoList(S.rows), lead = S.lead.Ahamove;
+  const day = base().filter((r) => r.ht === 'Ahamove' && !r.huy && r.ngay === sel);
+  const endDay = Date.UTC(new Date(S.snap).getUTCFullYear(), new Date(S.snap).getUTCMonth(), new Date(S.snap).getUTCDate(), 23, 59, 59);
+  return {khos, rows: d3.rollups(day, (v) => v, (r) => r.gio).sort((a, b) => a[0] < b[0] ? -1 : 1).map(([g, v]) => {
+    const hen = v[0].hen, deadline = hen - lead * 3600000;
+    const chua = v.filter((r) => !r.xuat), conGiao = v.filter((r) => !r.giao);
+    let st;
+    if (hen < S.snap && conGiao.length) st = 1;
+    else if (chua.length && deadline < S.snap) st = 2;
+    else if (chua.length && deadline <= endDay) st = 3;
+    else st = chua.length ? 4 : 5;
+    return {gio: g, hen, deadline, st, tong: cnt(v), chua: cnt(chua), daXuat: cnt(v.filter((r) => r.xuat)),
+      per: khos.map((k) => [cnt(chua.filter((r) => r.kho === k)), cnt(v.filter((r) => r.kho === k))])};
+  })};
+}
+function renderAhaSlots() {
+  const {khos, rows} = ahaSlots(), t = $('ahaSlot');
+  $('ahaSlotDay').textContent = dmy(S.sel);
+  table(t, ['Khung giờ', ...khos.map(khoShort), 'Tổng', 'Chưa xuất'],
+    rows.map((r) => [r.gio, ...r.per.map(([a, b]) => b), r.tong, r.chua]),
+    {left: [0], dotZero: true, empty: 'Không có đơn Ahamove hẹn giao ngày ' + dmy(S.sel) + '.',
+     rowClass: (ri) => rows[ri].st === 1 && rows[ri].chua ? 'past' : '',
+     cellClass: (ri, i, v) => i === khos.length + 1 ? 's' : (i === khos.length + 2 && v > 0) ? (rows[ri].st <= 2 ? 'b' : 'w') : ''});
+}
+async function exportPartner(ht) {
+  const rows = partnerRows(ht), khos = khoList(S.rows), lead = S.lead[ht];
+  if (!rows.length) { $('msg').className = 'msg'; $('msg').textContent = 'Không có đơn ' + ht + ' chưa giao trong file.'; return; }
+  const wb = XLSX.utils.book_new();
+  const dU = (list) => new Set(list.map((r) => r.don)).size;
+  const sum = [['Kho', 'Đơn chưa giao', ...ST.map((t) => t.name + ' (đơn)'), 'Số dòng SP chưa giao']];
+  khos.forEach((k) => { const d = rows.filter((r) => r.kho === k); sum.push([k, dU(d), ...ST.map((t) => dU(d.filter((r) => r.st === t.id))), d.length]); });
+  sum.push(['Tổng', dU(rows), ...ST.map((t) => dU(rows.filter((r) => r.st === t.id))), rows.length]);
+  sum.push([]);
+  sum.push(['Đối tác: ' + ht + ' · Dữ liệu lúc ' + fullTime(S.snap) + ' · Hạn xuất = giờ hẹn trừ ' + lead + ' giờ']);
+  ST.forEach((t) => sum.push([t.name + ': ' + t.note]));
+  XLSX.utils.book_append_sheet(wb, sheetOf(sum, [36, 14, 12, 12, 18, 12, 20]), 'TONG HOP');
+  const ds = [['Mức', 'Kho', 'Mã đơn hàng', 'Thời gian hẹn giao', 'Hạn xuất kho', 'Trễ so với giờ hẹn (giờ)', 'Trạng thái xuất', 'Trạng thái duyệt', 'Mã sản phẩm', 'Tên sản phẩm', 'Số lượng']];
+  rows.slice().sort((a, b) => a.st - b.st || a.deadline - b.deadline || khoRank(a.kho) - khoRank(b.kho) || a.don.localeCompare(b.don)).forEach((r) => ds.push([
+    ST[r.st - 1].name, r.kho, r.don, fullTime(r.hen), fullTime(r.deadline), r.st === 1 ? Math.round(lateHours(r.hen) * 10) / 10 : '',
+    r.xuat ? 'Đã xuất' : 'Chưa xuất', r.duyet ? 'Đã duyệt' : 'Chưa duyệt', r.sp, r.tenSp, r.sl]));
+  XLSX.utils.book_append_sheet(wb, sheetOf(ds, [16, 34, 22, 17, 17, 14, 13, 13, 18, 52, 9]), 'CHI TIET');
+  if (ht === 'Ahamove') {
+    const {khos: ks, rows: sr} = ahaSlots();
+    const ss = [['Khung giờ', ...ks.map(khoShort), 'Tổng', 'Chưa xuất']];
+    sr.forEach((r) => ss.push([r.gio, ...r.per.map(([a, b]) => b), r.tong, r.chua]));
+    ss.push(['Tổng', ...ks.map((k, j) => d3.sum(sr, (r) => r.per[j][1])), d3.sum(sr, (r) => r.tong), d3.sum(sr, (r) => r.chua)]);
+    ss.push([]); ss.push(['Ngày hẹn giao ' + dmy(S.sel) + ' · Đếm theo ' + (S.unit === 'don' ? 'đơn hàng' : 'dòng sản phẩm') + ' · Hạn xuất = giờ hẹn trừ 1 giờ']);
+    XLSX.utils.book_append_sheet(wb, sheetOf(ss, [11, ...ks.map(() => 14), 9, 11]), 'KHUNG GIO ' + dm(S.sel).replace('/', '-'));
+  }
+  const d = new Date(S.snap), tag = pad(d.getUTCDate()) + '-' + pad(d.getUTCMonth() + 1) + '-' + d.getUTCFullYear() + '_' + pad(d.getUTCHours()) + pad(d.getUTCMinutes());
+  const late = dU(rows.filter((r) => r.st <= 2));
+  await saveBook(wb, 'Tre_don_' + ht + '_' + tag + '.xlsx', 'Đã tải báo cáo trễ ' + ht + ': ' + fmt(late) + ' đơn trễ, ' + fmt(dU(rows.filter((r) => r.st === 3))) + ' đơn cần xuất hôm nay.');
+}
+
+let daysPlayed = false;
+function drawDays(B, khos) {
+  const box = $('dayChart'); box.replaceChildren();
+  const days = [...new Set(B.map((r) => r.ngay).filter(Boolean))].sort();
+  if (!days.length) { box.append(el('p', {class: 'empty'}, 'Không có dữ liệu.')); return; }
+  const data = days.map((d) => { const v = B.filter((r) => r.ngay === d); const o = {ngay: d, tong: cnt(v), can: cnt(v.filter(isCan))}; khos.forEach((k) => { o[k] = cnt(v.filter((r) => r.kho === k)); }); return o; });
+  const W = Math.max(300, box.clientWidth), H = 260;
+  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Biểu đồ cột chồng theo ngày hẹn giao của từng kho');
+  const y0 = d3.scaleLinear().domain([0, d3.max(data, (o) => o.tong) || 1]).nice();
+  const M = {t: 18, r: 6, b: 28, l: textW(svg, fmt(y0.domain()[1])) + 10};
+  const x = d3.scaleBand().domain(days).range([M.l, W - M.r]).padding(0.18);
+  const y = y0.range([H - M.b, M.t]);
+  svg.append('g').attr('class', 'grid').attr('transform', `translate(${M.l},0)`).call(d3.axisLeft(y).ticks(5).tickSize(-(W - M.l - M.r)).tickFormat(''));
+  svg.append('g').attr('transform', `translate(${M.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat(fmt).tickSize(0).tickPadding(6)).select('.domain').remove();
+  const step = Math.ceil(days.length / Math.max(2, Math.floor((W - M.l - M.r) / 42)));
+  svg.append('g').attr('transform', `translate(0,${H - M.b})`).call(d3.axisBottom(x).tickValues(days.filter((_, i) => i % step === 0)).tickFormat(dm).tickSizeOuter(0));
+  const animate = !daysPlayed && window.matchMedia && window.matchMedia('(prefers-reduced-motion: no-preference)').matches; daysPlayed = true;
+  d3.stack().keys(khos)(data).forEach((layer) => {
+    const rects = svg.append('g').selectAll('rect').data(layer).join('rect').attr('x', (p) => x(p.data.ngay)).attr('width', x.bandwidth()).style('fill', kColor(khoRank(layer.key)));
+    if (animate) rects.attr('y', y(0)).attr('height', 0).transition().duration(550).attr('y', (p) => y(p[1])).attr('height', (p) => Math.max(0, y(p[0]) - y(p[1])));
+    else rects.attr('y', (p) => y(p[1])).attr('height', (p) => Math.max(0, y(p[0]) - y(p[1])));
+  });
+  const top = new Set([...data].sort((a, b) => b.tong - a.tong).slice(0, 4).map((o) => o.ngay));
+  svg.append('g').selectAll('text').data(data.filter((o) => top.has(o.ngay))).join('text').attr('class', 'vl').attr('text-anchor', 'middle')
+    .attr('x', (o) => x(o.ngay) + x.bandwidth() / 2).attr('y', (o) => y(o.tong) - 5).text((o) => fmt(o.tong));
+  if (S.sel && days.includes(S.sel)) svg.append('rect').attr('x', x(S.sel) - 2).attr('width', x.bandwidth() + 4).attr('y', M.t - 4).attr('height', H - M.t - M.b + 4)
+    .attr('fill', 'none').attr('stroke', css('--warn')).attr('stroke-width', 2).attr('rx', 3);
+  const tip = makeTip(box);
+  svg.append('g').selectAll('rect').data(data).join('rect').attr('x', (o) => x(o.ngay) - x.step() * x.paddingInner() / 2).attr('width', x.step())
+    .attr('y', M.t).attr('height', H - M.t - M.b).attr('fill', 'transparent').style('cursor', 'pointer')
+    .on('pointermove', (ev, o) => tip.show(ev, 'Ngày ' + dmy(o.ngay) + ' · ' + fmt(o.tong) + ' ' + unitWord(), khos.map((k) => [khoShort(k), fmt(o[k])]).concat([['Chưa xuất', fmt(o.can)]])))
+    .on('pointerleave', () => tip.hide())
+    .on('click', (ev, o) => { S.sel = o.ngay; render(); $('han-giao').scrollIntoView({behavior: 'smooth', block: 'start'}); });
+}
+
+function render() {
+  $('srcPill').textContent = S.demo ? (S.rows.length ? 'File mẫu' : 'Chưa có dữ liệu') : 'File đã nhập';
+  $('srcPill').className = 'pill ' + (S.demo ? 'demo' : 'ok');
+  $('srcName').textContent = S.file;
+  $('srcTime').textContent = fullTime(S.snap);
+  document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.unit === S.unit ? 'true' : 'false'));
+  renderDue();
+  renderPartner('Ahamove', 'aha');
+  renderAhaSlots();
+  renderPartner('GHTK', 'ghtk');
+  renderAll();
+}
+
+function pickDefaultDay() {
+  const days = [...new Set(S.rows.map((r) => r.ngay).filter(Boolean))].sort();
+  const t = todayIso(), s = isoDay(S.snap);
+  S.sel = days.includes(t) ? t : days.includes(s) ? s : (days.find((d) => d >= s) || days[0] || t);
+  const dIn = $('dayIn'); dIn.min = days[0] || ''; dIn.max = days[days.length - 1] || '';
+}
+
+/* ---------- Xuất Excel ---------- */
+const lateHours = (w) => Math.max(0, (S.snap - w) / 3600000);
+const lateText = (w) => { const h = lateHours(w); return h >= 24 ? (Math.floor(h / 24) + ' ngày ' + Math.round(h % 24) + ' giờ') : (Math.round(h * 10) / 10).toLocaleString('vi-VN') + ' giờ'; };
+async function saveBook(wb, name, okText) {
+  const msg = $('msg');
+  if (!S.downloads) { msg.className = 'msg err'; msg.textContent = 'Trang đang mở ở chế độ không tải file được. Mở trang trong Claude để tải Excel.'; return; }
+  const buf = XLSX.write(wb, {bookType: 'xlsx', type: 'array'});
+  try {
+    await S.downloads.save({filename: name, data: new Blob([buf])});
+    msg.className = 'msg'; msg.textContent = okText;
+  } catch (e) {
+    msg.className = 'msg err'; msg.textContent = e && e.code === 'declined' ? 'Đã hủy tải file.' : 'Chưa tải được file. Thử lại sau giây lát.';
+  }
+}
+async function exportLate() {
+  const msg = $('msg'), B = base(), khos = khoList(S.rows);
+  const lines = B.filter(isLate).sort((a, b) => a.hen - b.hen || khoRank(a.kho) - khoRank(b.kho) || a.don.localeCompare(b.don));
+  if (!lines.length) {
+    msg.className = 'msg'; msg.textContent = 'Không có đơn trễ hẹn khách tại thời điểm dữ liệu ' + fullTime(S.snap) + (S.tra ? '.' : ' (chưa tính phiếu trả hàng NCC).');
+    return;
+  }
+  const wb = XLSX.utils.book_new();
+  const sum = [['Kho', 'Số đơn trễ', 'Số dòng SP', 'Chưa xuất', 'Đã xuất chưa giao', 'Trễ lâu nhất (giờ)', 'Hẹn giao sớm nhất']];
+  khos.forEach((k) => {
+    const d = lines.filter((r) => r.kho === k); if (!d.length) return;
+    sum.push([k, new Set(d.map((r) => r.don)).size, d.length, new Set(d.filter((r) => !r.xuat).map((r) => r.don)).size,
+      new Set(d.filter((r) => r.xuat).map((r) => r.don)).size, Math.round(lateHours(d[0].hen) * 10) / 10, fullTime(d[0].hen)]);
+  });
+  sum.push(['Tổng', new Set(lines.map((r) => r.don)).size, lines.length, new Set(lines.filter((r) => !r.xuat).map((r) => r.don)).size,
+    new Set(lines.filter((r) => r.xuat).map((r) => r.don)).size, Math.round(lateHours(lines[0].hen) * 10) / 10, fullTime(lines[0].hen)]);
+  sum.push([]); sum.push(['Trễ hẹn = hẹn giao trước ' + fullTime(S.snap) + ', chưa giao, chưa hủy' + (S.tra ? '; có tính phiếu trả hàng NCC.' : '; không tính phiếu trả hàng NCC.')]);
+  XLSX.utils.book_append_sheet(wb, sheetOf(sum, [36, 11, 11, 11, 17, 17, 18]), 'TONG HOP TRE HEN');
+  const ds = [['Kho', 'Mã đơn hàng', 'Thời gian hẹn giao', 'Số giờ trễ', 'Hình thức giao', 'Trạng thái xuất', 'Trạng thái duyệt', 'Loại', 'Mã sản phẩm', 'Tên sản phẩm', 'Số lượng']];
+  lines.forEach((r) => ds.push([r.kho, r.don, fullTime(r.hen), Math.round(lateHours(r.hen) * 10) / 10, r.ht, r.xuat ? 'Đã xuất' : 'Chưa xuất',
+    r.duyet ? 'Đã duyệt' : 'Chưa duyệt', r.tra ? 'Trả hàng NCC' : 'Đơn khách', r.sp, r.tenSp, r.sl]));
+  XLSX.utils.book_append_sheet(wb, sheetOf(ds, [34, 22, 17, 10, 18, 13, 13, 13, 18, 52, 9]), 'CHI TIET TRE HEN');
+  const d = new Date(S.snap), tag = pad(d.getUTCDate()) + '-' + pad(d.getUTCMonth() + 1) + '-' + d.getUTCFullYear() + '_' + pad(d.getUTCHours()) + pad(d.getUTCMinutes());
+  await saveBook(wb, 'Tre_hen_khach_' + tag + '.xlsx', 'Đã tải danh sách trễ hẹn: ' + fmt(new Set(lines.map((r) => r.don)).size) + ' đơn, ' + fmt(lines.length) + ' dòng.');
+}
+function sheetOf(aoa, widths) { const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = widths.map((w) => ({wch: w})); ws['!autofilter'] = {ref: XLSX.utils.encode_range({s: {r: 0, c: 0}, e: {r: Math.max(0, aoa.length - 1), c: aoa[0].length - 1}})}; return ws; }
+async function exportDay() {
+  const B = base(), sel = S.sel, day = B.filter((r) => r.ngay === sel), khos = khoList(S.rows);
+  const can = day.filter(isCan).sort((a, b) => khoRank(a.kho) - khoRank(b.kho) || a.hen - b.hen || a.don.localeCompare(b.don));
+  const wb = XLSX.utils.book_new();
+  const sum = [['Kho', 'Hẹn giao', 'Ahamove', 'GHTK', 'Siêu thị', 'Chưa xuất (cần xử lý)', 'Đang giao', 'Đã giao', 'Trễ hạn']];
+  khos.forEach((k) => { const d = day.filter((r) => r.kho === k); sum.push([k, cnt(d), cnt(d.filter((r) => r.ht === 'Ahamove')), cnt(d.filter((r) => r.ht === 'GHTK')), cnt(d.filter((r) => r.ht === 'Giao tại siêu thị')), cnt(d.filter(isCan)), cnt(d.filter(isDang)), cnt(d.filter((r) => r.giao)), cnt(B.filter((r) => r.kho === k && isLate(r)))]); });
+  sum.push(['Tổng', cnt(day), cnt(day.filter((r) => r.ht === 'Ahamove')), cnt(day.filter((r) => r.ht === 'GHTK')), cnt(day.filter((r) => r.ht === 'Giao tại siêu thị')), cnt(day.filter(isCan)), cnt(day.filter(isDang)), cnt(day.filter((r) => r.giao)), cnt(B.filter(isLate))]);
+  sum.push([]); sum.push(['Ngày hẹn giao: ' + dmy(sel) + ' · Đếm theo ' + (S.unit === 'don' ? 'đơn hàng' : 'dòng sản phẩm') + ' · Dữ liệu lúc ' + fullTime(S.snap)]);
+  XLSX.utils.book_append_sheet(wb, sheetOf(sum, [36, 10, 10, 10, 10, 20, 11, 9, 9]), 'TONG HOP KHO');
+  const slots = d3.rollups(day, (v) => v, (r) => r.gio).sort((a, b) => a[0] < b[0] ? -1 : 1);
+  const sl = [['Khung giờ', ...khos.map(khoShort), 'Tổng', 'Chưa xuất']];
+  slots.forEach(([g, v]) => sl.push([g, ...khos.map((k) => cnt(v.filter((r) => r.kho === k))), cnt(v), cnt(v.filter(isCan))]));
+  XLSX.utils.book_append_sheet(wb, sheetOf(sl, [11, ...khos.map(() => 14), 9, 11]), 'KHUNG GIO');
+  const ds = [['Kho', 'Thời gian hẹn giao', 'Hình thức giao', 'Mã đơn hàng', 'Mã sản phẩm', 'Tên sản phẩm', 'Số lượng', 'Trạng thái duyệt']];
+  can.forEach((r) => ds.push([r.kho, fullTime(r.hen), r.ht, r.don, r.sp, r.tenSp, r.sl, r.duyet ? 'Đã duyệt' : 'Chưa duyệt']));
+  XLSX.utils.book_append_sheet(wb, sheetOf(ds, [34, 17, 18, 22, 18, 52, 9, 13]), 'CAN XU LY');
+  const name = 'Can_xu_ly_' + sel.split('-').reverse().join('-') + '.xlsx';
+  await saveBook(wb, name, 'Đã tải ' + name + ' (' + fmt(can.length) + ' dòng cần xử lý).');
+}
+
+/* ---------- Sự kiện ---------- */
+async function handleFile(file) {
+  if (!file) return;
+  const msg = $('msg'); msg.className = 'msg'; msg.textContent = 'Đang đọc ' + file.name + '…';
+  try {
+    const rows = parseBook(await file.arrayBuffer(), file.name);
+    S.rows = rows; S.file = file.name; S.demo = false; S.snap = snapFromName(file.name) || nowWall();
+    pickDefaultDay(); render();
+    msg.textContent = 'Đã nhập ' + fmt(rows.length) + ' dòng, ' + fmt(new Set(rows.map((r) => r.don)).size) + ' đơn từ ' + file.name + '.';
+  } catch (e) {
+    msg.className = 'msg err'; msg.textContent = (e && e.message) || 'Không đọc được file. Hãy dùng file .xlsx xuất từ hệ thống.';
+  }
+}
+$('fileIn').addEventListener('change', (e) => { handleFile(e.target.files[0]); e.target.value = ''; });
+const dz = $('dropZone');
+['dragenter', 'dragover'].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); dz.classList.add('over'); }));
+['dragleave', 'drop'].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); if (t === 'drop' || e.target === dz) dz.classList.remove('over'); }));
+document.addEventListener('drop', (e) => { dz.classList.remove('over'); const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) handleFile(f); });
+document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => { S.unit = b.dataset.unit; render(); }));
+$('chkHuy').addEventListener('change', (e) => { S.huy = e.target.checked; render(); });
+$('chkTra').addEventListener('change', (e) => { S.tra = e.target.checked; render(); });
+$('prevDay').addEventListener('click', () => { S.sel = addDay(S.sel, -1); render(); });
+$('nextDay').addEventListener('click', () => { S.sel = addDay(S.sel, 1); render(); });
+$('todayBtn').addEventListener('click', () => { S.sel = todayIso(); render(); });
+$('dayIn').addEventListener('change', (e) => { const v = e.target.value; if (v && e.target.validity.valid) { S.sel = v; render(); } });
+$('exportDay').addEventListener('click', exportDay);
+$('exportLate').addEventListener('click', exportLate);
+$('expAha').addEventListener('click', () => exportPartner('Ahamove'));
+$('expGhtk').addEventListener('click', () => exportPartner('GHTK'));
+
+$('exportLate2').addEventListener('click', exportLate);
+let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(render, 150); });
+if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+new MutationObserver(render).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+
+/* ---------- Khởi động ---------- */
+loadEmbedded(); pickDefaultDay(); render();
+/* Tải file: trong Claude dùng hộp thoại tải của Claude; trên trình duyệt thường (GitHub Pages) tải trực tiếp */
+const browserDownloads = {save: ({filename, data}) => new Promise((resolve) => {
+  const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
+  const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000); resolve({status: 'saved'});
+})};
+const exIds = ['exportDay', 'exportLate', 'exportLate2', 'expAha', 'expGhtk'];
+if (window.claude && typeof window.claude.use === 'function') {
+  window.claude.use('downloads').then((d) => { S.downloads = d || browserDownloads; }, () => { S.downloads = browserDownloads; });
+} else { S.downloads = browserDownloads; }
+exIds.forEach((id) => { $(id).hidden = false; });
+</script>
+</body>
+</html>
