@@ -259,7 +259,7 @@ details ul{margin:6px 0 0;padding-left:1.2em;display:flex;flex-direction:column;
       <li>Đọc sheet "Chi tiết yêu cầu xuất": Mã đơn hàng, Siêu thị xuất, Thời gian hẹn giao, Hình thức giao hàng, Trạng thái xuất / giao hàng / hủy, Loại YCX, Mã và tên sản phẩm, Số lượng. Thông tin khách hàng không được đọc.</li>
       <li>Mặc định đếm theo <b>đơn hàng</b> (mỗi mã đơn tính 1), bỏ đơn đã hủy và phiếu "Yêu cầu xuất trả hàng mua" (trả hàng nhà cung cấp). Bảng Pivot cũ đếm theo dòng sản phẩm và tính cả đơn hủy: bật "Đếm theo dòng SP" và hai ô tích để ra đúng số đó.</li>
       <li><b>Cần xử lý</b> = chưa xuất kho và chưa hủy. <b>Đang giao</b> = đã xuất, chưa giao xong. <b>Trễ hạn</b> = thời gian hẹn giao trước thời điểm dữ liệu, chưa giao, chưa hủy.</li>
-      <li><b>Báo cáo trễ theo đối tác</b> (Ahamove, GHTK), mỗi đơn chưa giao, chưa hủy được xếp vào một mức: <b>Trễ giao</b> = đã qua giờ hẹn; <b>Trễ xuất</b> = chưa xuất mà đã qua hạn xuất (giờ hẹn trừ số giờ chuẩn bị); <b>Cần xuất hôm nay</b> = hạn xuất rơi vào trong ngày của dữ liệu; còn lại là <b>Trong hạn</b>. Chuẩn hạn xuất: Ahamove trước giờ hẹn 1 giờ, GHTK trước giờ hẹn 72 giờ.</li>
+      <li><b>Báo cáo trễ theo đối tác</b> (Ahamove, GHTK), mỗi đơn chưa giao, chưa hủy được xếp vào một mức: <b>Trễ giao</b> = đã qua giờ hẹn; <b>Trễ xuất</b> = chưa xuất mà đã qua hạn xuất (giờ hẹn trừ số giờ chuẩn bị); <b>Cần xuất hôm nay</b> = hạn xuất rơi vào trong ngày của dữ liệu; còn lại là <b>Trong hạn</b>. Riêng GHTK không tính mức Trễ giao. Chuẩn hạn xuất: Ahamove trước giờ hẹn 1 giờ, GHTK trước giờ hẹn 72 giờ.</li>
       <li>Thời điểm dữ liệu lấy từ tên file (dạng ..._YYYYMMDD_HHMM.xlsx); nếu tên file không có thì lấy giờ lúc mở file.</li>
     </ul>
   </details>
@@ -557,27 +557,28 @@ const ST = [
   {id: 2, name: 'Trễ xuất', cls: 's2', note: 'Chưa xuất, đã qua hạn xuất'},
   {id: 3, name: 'Cần xuất hôm nay', cls: 's3', note: 'Hạn xuất trong ngày dữ liệu'},
   {id: 4, name: 'Trong hạn', cls: 's4', note: 'Còn thời gian hoặc đã xuất'}];
-function statusOf(r, leadH) {
+const stList = (ht) => ht === 'GHTK' ? ST.filter((t) => t.id !== 1) : ST;  /* GHTK không theo dõi trễ giao */
+function statusOf(r, leadH, noLate) {
   const deadline = r.hen - leadH * 3600000;
   const endDay = Date.UTC(new Date(S.snap).getUTCFullYear(), new Date(S.snap).getUTCMonth(), new Date(S.snap).getUTCDate(), 23, 59, 59);
-  if (r.hen < S.snap) return {st: 1, deadline};
+  if (!noLate && r.hen < S.snap) return {st: 1, deadline};
   if (!r.xuat && deadline < S.snap) return {st: 2, deadline};
   if (!r.xuat && deadline <= endDay) return {st: 3, deadline};
   return {st: 4, deadline};
 }
 function partnerRows(ht) {
   const lead = S.lead[ht];
-  return base().filter((r) => r.ht === ht && !r.giao && !r.huy && r.hen).map((r) => Object.assign({}, r, statusOf(r, lead)));
+  return base().filter((r) => r.ht === ht && !r.giao && !r.huy && r.hen).map((r) => Object.assign({}, r, statusOf(r, lead, ht === 'GHTK')));
 }
 const stPill = (id) => { const t = ST[id - 1]; return el('span', {class: 'st ' + t.cls}, t.name); };
 function renderPartner(ht, pre) {
   const rows = partnerRows(ht), khos = khoList(S.rows);
-  $(pre + 'Tiles').replaceChildren(...ST.map((t) => tile(t.name, cnt(rows.filter((r) => r.st === t.id)), t.note,
-    t.id === 1 ? (cnt(rows.filter((r) => r.st === 1)) ? 'bad' : '') : t.id === 2 ? (cnt(rows.filter((r) => r.st === 2)) ? 'bad' : '') : t.id === 3 ? 'warn' : 'ok')));
-  const kr = khos.map((k) => { const d = rows.filter((r) => r.kho === k); return [khoShort(k), cnt(d), ...ST.map((t) => cnt(d.filter((r) => r.st === t.id)))]; });
-  table($(pre + 'Kho'), ['Kho', 'Chưa giao', 'Trễ giao', 'Trễ xuất', 'Cần xuất\nhôm nay', 'Trong hạn'], kr, {
-    left: [0], cellClass: (ri, i, v) => i === 1 ? 's' : ((i === 2 || i === 3) && v > 0) ? 'b' : (i === 4 && v > 0) ? 'w' : '',
-    foot: ['Tổng', cnt(rows), ...ST.map((t) => cnt(rows.filter((r) => r.st === t.id)))]});
+  const L = stList(ht);
+  $(pre + 'Tiles').replaceChildren(...L.map((t) => { const n = cnt(rows.filter((r) => r.st === t.id)); return tile(t.name, n, t.note, t.id <= 2 ? (n ? 'bad' : '') : t.id === 3 ? 'warn' : 'ok'); }));
+  const kr = khos.map((k) => { const d = rows.filter((r) => r.kho === k); return [khoShort(k), cnt(d), ...L.map((t) => cnt(d.filter((r) => r.st === t.id)))]; });
+  table($(pre + 'Kho'), ['Kho', 'Chưa giao', ...L.map((t) => t.id === 3 ? 'Cần xuất\nhôm nay' : t.name)], kr, {
+    left: [0], cellClass: (ri, i, v) => { if (i === 1) return 's'; const t = L[i - 2]; return t && v > 0 ? (t.id <= 2 ? 'b' : t.id === 3 ? 'w' : '') : ''; },
+    foot: ['Tổng', cnt(rows), ...L.map((t) => cnt(rows.filter((r) => r.st === t.id)))]});
   const list = d3.rollups(rows.filter((r) => r.st < 4), (v) => v[0], (r) => r.don).map((x) => x[1]).sort((a, b) => a.st - b.st || a.deadline - b.deadline);
   const t = $(pre + 'List');
   table(t, ['Mức', 'Mã đơn hàng', 'Kho', 'Giờ hẹn', 'Hạn xuất', 'Xuất kho'], list.slice(0, 60).map((r) => ['', r.don, r.ten, shortTime(r.hen), shortTime(r.deadline), r.xuat ? 'Đã xuất' : 'Chưa xuất']),
@@ -616,18 +617,20 @@ async function exportPartner(ht) {
   if (!rows.length) { $('msg').className = 'msg'; $('msg').textContent = 'Không có đơn ' + ht + ' chưa giao trong file.'; return; }
   const wb = XLSX.utils.book_new();
   const dU = (list) => new Set(list.map((r) => r.don)).size;
-  const sum = [['Kho', 'Đơn chưa giao', ...ST.map((t) => t.name + ' (đơn)'), 'Số dòng SP chưa giao']];
-  khos.forEach((k) => { const d = rows.filter((r) => r.kho === k); sum.push([k, dU(d), ...ST.map((t) => dU(d.filter((r) => r.st === t.id))), d.length]); });
-  sum.push(['Tổng', dU(rows), ...ST.map((t) => dU(rows.filter((r) => r.st === t.id))), rows.length]);
+  const L = stList(ht);
+  const sum = [['Kho', 'Đơn chưa giao', ...L.map((t) => t.name + ' (đơn)'), 'Số dòng SP chưa giao']];
+  khos.forEach((k) => { const d = rows.filter((r) => r.kho === k); sum.push([k, dU(d), ...L.map((t) => dU(d.filter((r) => r.st === t.id))), d.length]); });
+  sum.push(['Tổng', dU(rows), ...L.map((t) => dU(rows.filter((r) => r.st === t.id))), rows.length]);
   sum.push([]);
   sum.push(['Đối tác: ' + ht + ' · Dữ liệu lúc ' + fullTime(S.snap) + ' · Hạn xuất = giờ hẹn trừ ' + lead + ' giờ']);
-  ST.forEach((t) => sum.push([t.name + ': ' + t.note]));
+  L.forEach((t) => sum.push([t.name + ': ' + t.note]));
   XLSX.utils.book_append_sheet(wb, sheetOf(sum, [36, 14, 12, 12, 18, 12, 20]), 'TONG HOP');
-  const ds = [['Mức', 'Kho', 'Mã đơn hàng', 'Thời gian hẹn giao', 'Hạn xuất kho', 'Trễ so với giờ hẹn (giờ)', 'Trạng thái xuất', 'Trạng thái duyệt', 'Mã sản phẩm', 'Tên sản phẩm', 'Số lượng']];
+  const noLate = ht === 'GHTK';
+  const ds = [['Mức', 'Kho', 'Mã đơn hàng', 'Thời gian hẹn giao', 'Hạn xuất kho', ...(noLate ? [] : ['Trễ so với giờ hẹn (giờ)']), 'Trạng thái xuất', 'Trạng thái duyệt', 'Mã sản phẩm', 'Tên sản phẩm', 'Số lượng']];
   rows.slice().sort((a, b) => a.st - b.st || a.deadline - b.deadline || khoRank(a.kho) - khoRank(b.kho) || a.don.localeCompare(b.don)).forEach((r) => ds.push([
-    ST[r.st - 1].name, r.kho, r.don, fullTime(r.hen), fullTime(r.deadline), r.st === 1 ? Math.round(lateHours(r.hen) * 10) / 10 : '',
+    ST[r.st - 1].name, r.kho, r.don, fullTime(r.hen), fullTime(r.deadline), ...(noLate ? [] : [r.st === 1 ? Math.round(lateHours(r.hen) * 10) / 10 : '']),
     r.xuat ? 'Đã xuất' : 'Chưa xuất', r.duyet ? 'Đã duyệt' : 'Chưa duyệt', r.sp, r.tenSp, r.sl]));
-  XLSX.utils.book_append_sheet(wb, sheetOf(ds, [16, 34, 22, 17, 17, 14, 13, 13, 18, 52, 9]), 'CHI TIET');
+  XLSX.utils.book_append_sheet(wb, sheetOf(ds, noLate ? [16, 34, 22, 17, 17, 13, 13, 18, 52, 9] : [16, 34, 22, 17, 17, 14, 13, 13, 18, 52, 9]), 'CHI TIET');
   if (ht === 'Ahamove') {
     const {khos: ks, rows: sr} = ahaSlots();
     const ss = [['Khung giờ', ...ks.map(khoShort), 'Tổng', 'Chưa xuất']];
