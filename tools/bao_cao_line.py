@@ -97,8 +97,9 @@ def build(path, partners=('Ahamove',)):
         for p in partners:
             d = [o for o in O if o['kho'] == k and o['ht'] == p and not o['giao']]
             han = [o for o in d if o['hen'] <= end_day and o['hen'] >= snap]
-            tre = sorted([o for o in d if o['hen'] < snap], key=lambda o: o['hen'])
-            canh = sorted([o for o in d if o['hen'] >= snap and not o['xuat'] and o['dl'] < snap], key=lambda o: o['hen'])
+            # chỉ tính đơn hẹn giao trong ngày N; hẹn N-1 trở về trước coi là lỗi dữ liệu, bỏ qua
+            tre = sorted([o for o in d if o['hen'].date() == snap.date() and o['hen'] < snap], key=lambda o: o['hen'])
+            canh = sorted([o for o in d if o['hen'].date() == snap.date() and o['hen'] >= snap and not o['xuat'] and o['dl'] < snap], key=lambda o: o['hen'])
             L.append(NAME.get(p, p))
             L.append(f'• Hạn giao: {len(han)} đơn hẹn giao còn lại trong hôm nay')
             L.append(f'• Cảnh báo trễ: {len(canh)} đơn' + (' (chưa xuất, đã quá hạn xuất)' if canh else ''))

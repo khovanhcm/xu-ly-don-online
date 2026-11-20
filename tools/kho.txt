@@ -1,0 +1,4 @@
+# Mã kho chọn ở ô "Kho" khi xuất báo cáo (dashboard 77). Mỗi dòng một mã; thêm/bớt mã tại đây.
+15698
+36813
+36703
