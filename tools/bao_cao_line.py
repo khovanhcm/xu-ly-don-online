@@ -137,12 +137,12 @@ def build(path, partners=('Ahamove',)):
             if tre:
                 L.append('• Danh sách đơn trễ:')
                 for o in tre[:MAX_LIST]:
-                    L.append(f'   - {o["don"]} · hẹn {o["hen"]:%H:%M %d/%m} · trễ {late_txt((snap - o["hen"]).total_seconds() / 3600)} · {"đã xuất" if o["xuat"] else "chưa xuất"}')
+                    L.append(f'   - {o["don"]} · hẹn {o["hen"]:%H:%M %d/%m} · trễ {late_txt((snap - o["hen"]).total_seconds() / 3600)} · {"đã xuất" if o["xuat"] else "chưa xuất"}{sp_txt(o)}')
                 if len(tre) > MAX_LIST: L.append(f'   … và {len(tre) - MAX_LIST} đơn khác')
             if canh:
                 L.append('• Đơn cảnh báo trễ:')
                 for o in canh[:MAX_LIST]:
-                    L.append(f'   - {o["don"]} · hẹn {o["hen"]:%H:%M %d/%m} · hạn xuất {o["dl"]:%H:%M}')
+                    L.append(f'   - {o["don"]} · hẹn {o["hen"]:%H:%M %d/%m} · hạn xuất {o["dl"]:%H:%M}{sp_txt(o)}')
                 if len(canh) > MAX_LIST: L.append(f'   … và {len(canh) - MAX_LIST} đơn khác')
     return '\n'.join(L)
 
