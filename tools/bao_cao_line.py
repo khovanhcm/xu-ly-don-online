@@ -14,6 +14,8 @@ import openpyxl
 LEAD = {'Ahamove': 1, 'GHTK': 72, 'Siêu thị': 0}
 KHO_ORDER = ['Tân Bình', 'Bình Chánh', 'Thủ Đức']
 MAX_LIST = 10
+MAX_HAN = 20  # số đơn tối đa liệt kê ở mục Hạn giao mỗi kho
+SP_LEN = 45   # cắt tên sản phẩm cho gọn tin
 
 norm = lambda s: re.sub(r'\s+', ' ', str(s if s is not None else '').strip().lower())
 
@@ -56,6 +58,7 @@ def load(path):
     col = lambda n: head.index(norm(n)) if norm(n) in head else -1
     c = dict(don=col('Mã đơn hàng'), kho=col('Siêu thị xuất'), hen=col('Thời gian hẹn giao'), xuat=col('Trạng thái xuất'),
              giao=col('Trạng thái giao hàng'), ht=col('Hình thức giao hàng'), loai=col('Loại YCX'),
+             sp=col('Tên sản phẩm'), sl=col('Số lượng'), gia=col('Giá bán'),
              huy=col('Trạng thái hủy') if col('Trạng thái hủy') >= 0 else 15,
              tra=col('Tình trạng nhập trả của sản phẩm đổi với sản phẩm chính') if col('Tình trạng nhập trả của sản phẩm đổi với sản phẩm chính') >= 0 else 44)
     g = lambda r, i: r[i] if 0 <= i < len(r) else None
@@ -66,10 +69,17 @@ def load(path):
         if norm(g(r, c['huy'])) == 'đã hủy' or norm(g(r, c['tra'])) == 'đã trả': continue
         if re.search('trả hàng', str(g(r, c['loai']) or ''), re.I): continue
         o = orders.setdefault(don, dict(don=don, kho=kho_short(g(r, c['kho'])), hen=to_dt(g(r, c['hen'])), ht=ht_of(g(r, c['ht'])),
-                                        xuat=True, giao=True))
+                                        xuat=True, giao=True, sp=[]))
         # một đơn nhiều dòng: còn dòng nào chưa xuất / chưa giao thì cả đơn tính là chưa
         o['xuat'] = o['xuat'] and norm(g(r, c['xuat'])) == 'đã xuất'
         o['giao'] = o['giao'] and norm(g(r, c['giao'])) == 'đã giao'
+        ten = re.sub(r'\s+', ' ', str(g(r, c['sp']) or '')).strip()
+        if ten:
+            try: sl = int(float(g(r, c['sl']) or 1))
+            except (TypeError, ValueError): sl = 1
+            try: gia = float(g(r, c['gia']) or 0)
+            except (TypeError, ValueError): gia = 0
+            o['sp'].append((ten, sl, gia))
     return list(orders.values())
 
 
@@ -86,6 +96,20 @@ def late_txt(h):
     return f'{hh // 24}n{hh % 24}g' if hh >= 24 else f'{hh}g{m % 60:02d}p'
 
 
+VOUCHER = re.compile(r'(?i)^(pmh|phiếu mua hàng|phiếu quà tặng|voucher)')
+
+
+def sp_txt(o):
+    """Sản phẩm chính của đơn (giá cao nhất, bỏ phiếu mua hàng) + số SP khác."""
+    sp = [x for x in o['sp'] if not VOUCHER.search(x[0])] or o['sp']
+    if not sp: return ''
+    sp = sorted(sp, key=lambda x: -x[2])
+    ten, sl, _ = sp[0]
+    if len(ten) > SP_LEN: ten = ten[:SP_LEN - 1].rstrip() + '…'
+    t = f' · {ten} x{sl}'
+    return t + (f' (+{len(sp) - 1} SP)' if len(sp) > 1 else '')
+
+
 def build(path, partners=('Ahamove',)):
     snap = snap_of(path)
     end_day = snap.replace(hour=23, minute=59, second=59)
@@ -99,12 +123,15 @@ def build(path, partners=('Ahamove',)):
         L += ['', f'🏬 Kho {k}']
         for p in partners:
             d = [o for o in O if o['kho'] == k and o['ht'] == p and not o['giao']]
-            han = [o for o in d if o['hen'] <= end_day and o['hen'] >= snap]
+            han = sorted([o for o in d if o['hen'] <= end_day and o['hen'] >= snap], key=lambda o: o['hen'])
             # chỉ tính đơn hẹn giao trong ngày N; hẹn N-1 trở về trước coi là lỗi dữ liệu, bỏ qua
             tre = sorted([o for o in d if o['hen'].date() == snap.date() and o['hen'] < snap], key=lambda o: o['hen'])
             canh = sorted([o for o in d if o['hen'].date() == snap.date() and o['hen'] >= snap and not o['xuat'] and o['dl'] < snap], key=lambda o: o['hen'])
             L.append(NAME.get(p, p))
             L.append(f'• Hạn giao: {len(han)} đơn hẹn giao còn lại trong hôm nay')
+            for o in han[:MAX_HAN]:
+                L.append(f'   - {o["don"]} · hẹn {o["hen"]:%H:%M} · {"đã xuất" if o["xuat"] else "chưa xuất"}{sp_txt(o)}')
+            if len(han) > MAX_HAN: L.append(f'   … và {len(han) - MAX_HAN} đơn khác')
             L.append(f'• Cảnh báo trễ: {len(canh)} đơn' + (' (chưa xuất, đã quá hạn xuất)' if canh else ''))
             L.append(f'• Đơn trễ: {len(tre)} đơn')
             if tre:
