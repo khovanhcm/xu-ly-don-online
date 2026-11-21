@@ -79,8 +79,11 @@ def snap_of(path):
 
 
 def late_txt(h):
-    h = int(h)
-    return f'{h // 24}n{h % 24}g' if h >= 24 else f'{h}g'
+    """h = số giờ (float). Dưới 1 giờ hiện phút."""
+    m = int(round(h * 60))
+    if m < 60: return f'{m}p'
+    hh = m // 60
+    return f'{hh // 24}n{hh % 24}g' if hh >= 24 else f'{hh}g{m % 60:02d}p'
 
 
 def build(path, partners=('Ahamove',)):
@@ -107,7 +110,7 @@ def build(path, partners=('Ahamove',)):
             if tre:
                 L.append('• Danh sách đơn trễ:')
                 for o in tre[:MAX_LIST]:
-                    L.append(f'   - {o["don"]} · hẹn {o["hen"]:%H:%M %d/%m} · trễ {late_txt((snap - o["hen"]).total_seconds() // 3600)} · {"đã xuất" if o["xuat"] else "chưa xuất"}')
+                    L.append(f'   - {o["don"]} · hẹn {o["hen"]:%H:%M %d/%m} · trễ {late_txt((snap - o["hen"]).total_seconds() / 3600)} · {"đã xuất" if o["xuat"] else "chưa xuất"}')
                 if len(tre) > MAX_LIST: L.append(f'   … và {len(tre) - MAX_LIST} đơn khác')
             if canh:
                 L.append('• Đơn cảnh báo trễ:')
