@@ -1,7 +1,7 @@
 // Chạy trong trang https://report.mwgroup.vn/ManagerDownload (javascript_tool).
 // Lấy file Excel của dòng "Chi tiết yêu cầu xuất" mới nhất đã xuất xong, ĐỌC NGAY TRONG TRÌNH DUYỆT
 // (không tải về máy, không bật hộp thoại Save as), trả về danh sách đơn Ahamove chưa giao hẹn giao hôm nay
-// dạng "mã đơn|kho(N/B/T)|giờ hẹn (số serial Excel)|đã xuất(1/0)" + thời điểm xuất.
+// dạng "mã đơn|kho(N/B/T)|giờ hẹn (số serial Excel)|đã xuất(1/0)|tên SP^SL^giá;..." + thời điểm xuất.
 await (async () => {
   const row = [...document.querySelectorAll('tr')].find(t => t.textContent.includes('Chi tiết yêu cầu xuất'));
   if (!row) return { loi: 'Không thấy dòng Chi tiết yêu cầu xuất' };
@@ -41,17 +41,19 @@ await (async () => {
   const norm = v => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
   const head = parse(rows[0]); const C = w => Object.keys(head).find(k => norm(head[k]) === norm(w));
   const c = { loai: C('Loại YCX'), don: C('Mã đơn hàng'), xuat: C('Trạng thái xuất'), giao: C('Trạng thái giao hàng'), huy: C('Trạng thái hủy') || 'P',
-    ht: C('Hình thức giao hàng'), hen: C('Thời gian hẹn giao'), kho: C('Siêu thị xuất'), tra: C('Tình trạng nhập trả của sản phẩm đổi với sản phẩm chính') || 'AS' };
+    ht: C('Hình thức giao hàng'), hen: C('Thời gian hẹn giao'), kho: C('Siêu thị xuất'), sp: C('Tên sản phẩm'), sl: C('Số lượng'), gia: C('Giá bán'), tra: C('Tình trạng nhập trả của sản phẩm đổi với sản phẩm chính') || 'AS' };
   const O = {};
   for (let k = 1; k < rows.length; k++) { if (!rows[k].includes('<c')) continue; const r = parse(rows[k]); const don = String(r[c.don] ?? '').trim(); if (!don) continue;
     if (norm(r[c.huy]) === 'đã hủy' || norm(r[c.tra]) === 'đã trả' || /trả hàng/i.test(String(r[c.loai] ?? ''))) continue;
-    const o = O[don] || (O[don] = { kho: String(r[c.kho] ?? ''), hen: r[c.hen], ht: String(r[c.ht] ?? ''), xuat: true, giao: true });
-    o.xuat = o.xuat && norm(r[c.xuat]) === 'đã xuất'; o.giao = o.giao && norm(r[c.giao]) === 'đã giao'; }
+    const o = O[don] || (O[don] = { kho: String(r[c.kho] ?? ''), hen: r[c.hen], ht: String(r[c.ht] ?? ''), xuat: true, giao: true, sp: [] });
+    o.xuat = o.xuat && norm(r[c.xuat]) === 'đã xuất'; o.giao = o.giao && norm(r[c.giao]) === 'đã giao';
+    const ten = String(r[c.sp] ?? '').replace(/[|;^\s]+/g, ' ').trim(); if (ten) o.sp.push([ten, Number(r[c.sl]) || 1, Number(r[c.gia]) || 0].join('^')); }
   const [dd, mm, yy] = xuatLuc.slice(0, 10).split('/').map(Number);
   const today = Math.round((Date.UTC(yy, mm - 1, dd) - Date.UTC(1899, 11, 30)) / 86400000);
   const code = k => /tân bình/i.test(k) ? 'N' : /bình chánh/i.test(k) ? 'B' : /thủ đức/i.test(k) ? 'T' : '?';
+  const VOUCHER = /^(pmh|phiếu mua hàng|phiếu quà tặng|voucher)/i; // bỏ phiếu mua hàng giống sp_txt() của bao_cao_line.py
   const out = []; const khos = new Set();
   for (const [d, o] of Object.entries(O)) { if (typeof o.hen !== 'number') continue; khos.add(o.kho);
-    if (/ahamove/i.test(o.ht) && !o.giao && Math.floor(o.hen) === today) out.push([d, code(o.kho), o.hen, o.xuat ? 1 : 0].join('|')); }
+    if (/ahamove/i.test(o.ht) && !o.giao && Math.floor(o.hen) === today) out.push([d, code(o.kho), o.hen, o.xuat ? 1 : 0, (o.sp.filter(t => !VOUCHER.test(t)).length ? o.sp.filter(t => !VOUCHER.test(t)) : o.sp).join(';')].join('|')); }
   return { xuatLuc, soDong: rows.length - 2, soDon: Object.keys(O).length, khos: [...khos], soDong_Ahamove_homnay: out.length, rows: out.join('\n') };
 })()
