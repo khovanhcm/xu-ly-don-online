@@ -25,6 +25,8 @@
 - Các file Excel xuất: Cần xử lý trong ngày, Trễ hẹn khách, Trễ đơn Ahamove (có sheet khung giờ), Trễ đơn GHTK.
 - Giao diện: nền chàm đậm, thẻ màu oải hương, nút chàm, font Lexend (theo mẫu báo cáo NCC của họ).
 
+- Trang có 2 tab: "Xử lý hằng ngày" và "Báo cáo LINE tự động" (tạo tin LINE từ file đang mở + thông tin thiết lập gửi tự động), tách riêng.
+
 ## Việc còn mở
 - Chưa có.
 

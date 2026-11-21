@@ -129,6 +129,13 @@ details{font-size:12px;color:var(--bg-muted)}
 details b{color:var(--bg-ink)}
 details summary{cursor:pointer;font-weight:600}
 details ul{margin:6px 0 0;padding-left:1.2em;display:flex;flex-direction:column;gap:4px}
+.vtabs{display:flex;gap:6px;flex-wrap:wrap}
+.vtabs button{font:inherit;font-size:14px;font-weight:600;padding:8px 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer}
+.vtabs button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.linebox{white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.55;background:#e8f7e9;color:#1d2b1f;border-radius:12px;padding:14px 16px;margin:0;max-height:520px;overflow:auto}
+.kv{width:100%;border-collapse:collapse;font-size:13px}
+.kv td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.kv td:first-child{width:180px;color:var(--muted);font-weight:600}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -157,6 +164,11 @@ details ul{margin:6px 0 0;padding-left:1.2em;display:flex;flex-direction:column;
   </div>
   <div class="drop" id="dropZone">Kéo thả file "Chi tiết yêu cầu xuất" (.xlsx) vào đây để cập nhật. File chỉ được đọc trên máy anh/chị, không gửi đi đâu.</div>
   <div class="msg" id="msg" role="status"></div>
+  <div class="vtabs" role="tablist">
+    <button type="button" role="tab" data-view="viewDaily" aria-selected="true">Xử lý hằng ngày</button>
+    <button type="button" role="tab" data-view="viewLine" aria-selected="false">Báo cáo LINE tự động</button>
+  </div>
+  <div id="viewDaily" style="display:flex;flex-direction:column;gap:22px">
 
   <!-- HẠN GIAO TRONG NGÀY -->
   <section class="card due" id="han-giao">
@@ -263,6 +275,45 @@ details ul{margin:6px 0 0;padding-left:1.2em;display:flex;flex-direction:column;
       <li>Thời điểm dữ liệu lấy từ tên file (dạng ..._YYYYMMDD_HHMM.xlsx); nếu tên file không có thì lấy giờ lúc mở file.</li>
     </ul>
   </details>
+  </div>
+
+  <!-- BÁO CÁO LINE TỰ ĐỘNG -->
+  <div id="viewLine" hidden style="display:none;flex-direction:column;gap:14px">
+    <div class="grid2">
+      <div class="card">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <h3 style="margin:0">Tin nhắn LINE từ file đang mở</h3>
+          <button type="button" class="btn primary" id="copyLine">Sao chép tin</button>
+        </div>
+        <pre class="linebox" id="lineMsg"></pre>
+        <p class="muted small" style="margin:8px 0 0">Cùng cách tính với tin gửi tự động. Nhập file mới ở nút "Chọn file Excel" phía trên để cập nhật.</p>
+      </div>
+      <div class="card">
+        <h3>Thiết lập gửi tự động</h3>
+        <table class="kv"><tbody>
+          <tr><td>Giờ gửi</td><td>8g30 · 13g00 · 15g00 · 17g00 hằng ngày (máy bắt đầu chạy trước khoảng 5 phút)</td></tr>
+          <tr><td>Nhóm nhận</td><td>LINE "Kho Online Miền HCM"</td></tr>
+          <tr><td>Nguồn dữ liệu</td><td>report.mwgroup.vn → dashboard 77 "Chi tiết yêu cầu xuất"</td></tr>
+          <tr><td>Điều kiện lọc</td><td>Từ ngày N-3 · Đến ngày N+1 · Tìm theo: Kho xuất</td></tr>
+          <tr><td>Mã kho</td><td>15698 · 36813 · 36703 (sửa trong tools/kho.txt của repo)</td></tr>
+          <tr><td>Nội dung</td><td>Mỗi kho – Đơn Hoả Tốc (Ahamove): Hạn giao, Cảnh báo trễ, Đơn trễ, Danh sách đơn trễ</td></tr>
+          <tr><td>Máy chạy</td><td>Máy tính 83281-ntqui: bật, mở app Claude và LINE, không khóa màn hình</td></tr>
+          <tr><td>Mỗi sáng</td><td>Quét QR DMXWork đăng nhập report (trình duyệt trong app Claude) trước 8g25; phiên dùng 12 giờ</td></tr>
+          <tr><td>Khi lỗi</td><td>Không gửi vào nhóm, chỉ báo về điện thoại của anh/chị</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+    <details open>
+      <summary>Quy tắc tính trong tin LINE</summary>
+      <ul>
+        <li>Loại dòng "Đã hủy", "Đã trả" và phiếu trả hàng mua; đếm theo mã đơn, chỉ đơn Ahamove chưa giao.</li>
+        <li><b>Hạn giao</b>: đơn hẹn giao trong phần còn lại của hôm nay.</li>
+        <li><b>Cảnh báo trễ</b>: chưa tới giờ hẹn, chưa xuất, đã qua hạn xuất (giờ hẹn trừ 1 giờ).</li>
+        <li><b>Đơn trễ</b>: đã qua giờ hẹn, chưa giao. Chỉ tính đơn hẹn trong ngày N; hẹn N-1 trở về trước coi là lỗi dữ liệu, không báo.</li>
+        <li>Trạng thái giao hàng trong file có thể cập nhật chậm hơn thực tế, nên đơn trễ cần đối chiếu với kho trước khi xử lý.</li>
+      </ul>
+    </details>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
@@ -684,6 +735,44 @@ function drawDays(B, khos) {
     .on('click', (ev, o) => { S.sel = o.ngay; render(); $('han-giao').scrollIntoView({behavior: 'smooth', block: 'start'}); });
 }
 
+/* ---------- Tin nhắn LINE (giống tools/bao_cao_line.py) ---------- */
+function lineText() {
+  const snap = S.snap, day = isoDay(snap), L = [];
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const lateTxt = (ms) => { const m = Math.round(ms / 60000); if (m < 60) return m + 'p'; const h = Math.floor(m / 60); return h >= 24 ? Math.floor(h / 24) + 'n' + (h % 24) + 'g' : h + 'g' + pad2(m % 60) + 'p'; };
+  const t = (w) => hm(w) + ' ' + dm(isoDay(w));
+  const ord = new Map();
+  S.rows.filter((r) => !r.huy && !r.tra && r.hen && r.ht === 'Ahamove').forEach((r) => {
+    const o = ord.get(r.don) || {don: r.don, ten: r.ten, kho: r.kho, hen: r.hen, xuat: true, giao: true};
+    o.xuat = o.xuat && r.xuat; o.giao = o.giao && r.giao; ord.set(r.don, o);
+  });
+  const O = [...ord.values()].filter((o) => !o.giao);
+  L.push('📦 BÁO CÁO ĐƠN ONLINE · ' + hm(snap) + ' ' + dmy(day));
+  khoList(S.rows).forEach((k) => {
+    const d = O.filter((o) => o.kho === k && isoDay(o.hen) === day);
+    const han = d.filter((o) => o.hen >= snap);
+    const tre = d.filter((o) => o.hen < snap).sort((a, b) => a.hen - b.hen);
+    const canh = d.filter((o) => o.hen >= snap && !o.xuat && o.hen - 3600000 < snap).sort((a, b) => a.hen - b.hen);
+    L.push('', '🏬 Kho ' + khoShort(k).replace(/^TT\s+/i, ''), 'Đơn Hoả Tốc (Ahamove)',
+      '• Hạn giao: ' + han.length + ' đơn hẹn giao còn lại trong hôm nay',
+      '• Cảnh báo trễ: ' + canh.length + ' đơn' + (canh.length ? ' (chưa xuất, đã quá hạn xuất)' : ''),
+      '• Đơn trễ: ' + tre.length + ' đơn');
+    if (tre.length) { L.push('• Danh sách đơn trễ:'); tre.slice(0, 10).forEach((o) => L.push('   - ' + o.don + ' · hẹn ' + t(o.hen) + ' · trễ ' + lateTxt(snap - o.hen) + ' · ' + (o.xuat ? 'đã xuất' : 'chưa xuất'))); if (tre.length > 10) L.push('   … và ' + (tre.length - 10) + ' đơn khác'); }
+    if (canh.length) { L.push('• Đơn cảnh báo trễ:'); canh.slice(0, 10).forEach((o) => L.push('   - ' + o.don + ' · hẹn ' + t(o.hen) + ' · hạn xuất ' + hm(o.hen - 3600000))); if (canh.length > 10) L.push('   … và ' + (canh.length - 10) + ' đơn khác'); }
+  });
+  return L.join('\n');
+}
+function renderLine() { $('lineMsg').textContent = S.rows.length ? lineText() : 'Chưa có dữ liệu. Chọn file "Chi tiết yêu cầu xuất" để tạo tin.'; }
+$('copyLine').addEventListener('click', () => {
+  const txt = $('lineMsg').textContent;
+  const done = () => { $('copyLine').textContent = 'Đã sao chép'; setTimeout(() => { $('copyLine').textContent = 'Sao chép tin'; }, 1500); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, () => { const r = document.createRange(); r.selectNodeContents($('lineMsg')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); });
+});
+document.querySelectorAll('.vtabs button').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('.vtabs button').forEach((x) => { const on = x === b; x.setAttribute('aria-selected', on ? 'true' : 'false'); const v = $(x.dataset.view); v.hidden = !on; v.style.display = on ? 'flex' : 'none'; });
+  if (b.dataset.view === 'viewDaily') render();
+}));
+
 function render() {
   $('srcPill').textContent = S.demo ? (S.rows.length ? 'File mẫu' : 'Chưa có dữ liệu') : 'File đã nhập';
   $('srcPill').className = 'pill ' + (S.demo ? 'demo' : 'ok');
@@ -695,6 +784,7 @@ function render() {
   renderAhaSlots();
   renderPartner('GHTK', 'ghtk');
   renderAll();
+  renderLine();
 }
 
 function pickDefaultDay() {
